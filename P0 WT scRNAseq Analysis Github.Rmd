@@ -1,0 +1,564 @@
+---
+title: "P0 WT scRNA-seq"
+output: html_notebook
+---
+
+# **0. Load Packages**
+### scRNA-seq Analysis Packages
+```{r, warning=FALSE, message=FALSE}
+library(hdf5r)#read in .h5 cell ranger files
+library(Seurat)#had to install.packages('spatstat') as a Seurat dependency
+library(ggplot2)#for DotPlot and DotPlot table extraction
+library(sctransform)
+library(reticulate)
+#reticulate::py_install(packages ='umap-learn')# to install conda/umap-learn
+#install "BiocManager" in R
+library(limma)#for FindMarkers() function; install using BiocManager
+library(RColorBrewer)
+set.seed(1234)
+library(dplyr)
+library(readr)
+library(Signac)#had to install 'AnnotationFilter', 'Biostrings', 'Rsamtools', 'biovizBase', 'ggbio' as a Signac dependency using BiocManager;
+library(GenomeInfoDb)#install using BiocManager
+library(viridisLite)#install using BiocManager
+library(EnsDb.Mmusculus.v79)#load the mm10 genomic data; install using BiocManager
+library(BSgenome)#install using BiocManager
+library(BSgenome.Mmusculus.UCSC.mm10)#install using BiocManager
+library(SummarizedExperiment)#install using BiocManager
+library(multtest)#install using BiocManager
+library(metap)#install using BiocManager
+library(stringr)
+library(future)
+library(tictoc)#useful to time long steps
+plan('multisession', workers = 12)#cores = 12
+options(future.globals.maxSize = 64000 * 1024^2)
+```
+
+# **1a. Load the scRNA-seq Data & Create the Initial Seurat Object**
+## Load the CellRanger output(s) & initialize the Seurat object
+I use the .h5 files, which contain the filtered_feature_bc_matrix folder's files in addition to the metadata singlecell.csv file. Allows for 2-lines of code per sample :)
+```{r, warning=FALSE, message=FALSE}
+#load CellRanger
+scRNA_path <- 'W:/Driskell Lab/Single Cell Analysis/Raw Data/P0/scRNA/'#define the path to the scRNA-seq data's folder
+
+scRNA_WT.data <- Read10X_h5(filename = paste(scRNA_path, 'WT_filtered_feature_bc_matrix.h5', sep = ''))#read in the cell ranger hdf5 file
+scRNA_WT <- CreateSeuratObject(counts = scRNA_WT.data, min.cells = 3, min.features = 200)#default min.cells and min.features
+
+#view initial Seurat scRNA objects
+scRNA_WT
+```
+## QC Check
+```{r, warning=FALSE, message=FALSE}
+## WT ##
+#Store mitochondrial percentage in object meta data (for later regression)
+scRNA_WT <- PercentageFeatureSet(scRNA_WT, pattern = "^mt-", col.name = "percent.mt")
+VlnPlot(scRNA_WT, features = 'percent.mt')
+```
+
+## SCTransform (Normalize, Scale Data)
+```{r, warning=FALSE, message=FALSE}
+#Run sctransform (replaces NormalizeData, ScaleData, and FindVariableFeatures + RegressOut argument of ScaleData)
+tic('Running SCTransform')
+scRNA_WT <- SCTransform(scRNA_WT, vars.to.regress = "percent.mt", verbose = FALSE)
+toc()
+
+#Dimensional Reduction and Elbow Plot
+scRNA_WT <- RunPCA(scRNA_WT, verbose = FALSE)
+ElbowPlot(scRNA_WT, ndims = 50)
+```
+
+## UMAP (initial)
+Pick dimensions to use based on ElbowPlot above -- try to pick dimensions w/ > 1 standard deviation. In our case, up to 30 dimensions is greater than 5 standard deviations before it levels off (suggesting decline in variability). *If you are going to be working with scATAC-seq data (e.g. comparing or integrating) as well, I recommend setting FindClusters() to algorithm 3, which is SLM, the same algorithm used for FindClusters() in scATAC-seq Seurat objects (nice to use a consistent algorithm)*
+```{r message=FALSE, warning=FALSE}
+tic('Running UMAPs')
+#run the UMAP function using dimensions informed by elbow plot
+scRNA_WT <- RunUMAP(scRNA_WT, dims = 1:30, verbose = FALSE, umap.method = "umap-learn", metric = "correlation")#default is dims = 1:30
+
+#Higher PCs (dims=1:30) can represent subtle but relevant sources of heterogeneity
+scRNA_WT <- FindNeighbors(scRNA_WT, dims = 1:30, verbose = FALSE)
+scRNA_WT <- FindClusters(scRNA_WT, verbose = FALSE, algorithm = 3)#default is algorithm = 1 (Louvain), 3 = SLM
+
+DimPlot(scRNA_WT, label = TRUE, pt.size = 1.0, label.size = 6) + NoLegend()#numbers on clusters
+DimPlot(scRNA_WT, label = FALSE, pt.size = 1.0) + NoLegend()#no labels (to label in photoshop)
+#DimPlot(scRNA_WT, label = FALSE)#no numbers on clusters, legend off to side
+
+```
+
+### Change Resolution
+```{r message=FALSE, warning=FALSE}
+scRNA_WT <- FindClusters(scRNA_WT, verbose = FALSE, algorithm = 3, resolution = 0.5)#default is algorithm = 1 (Louvain), 3 = SLM
+
+DimPlot(scRNA_WT, label = TRUE, pt.size = 1.0, label.size = 6) + NoLegend()#numbers on clusters
+DimPlot(scRNA_WT, label = FALSE, pt.size = 1.0) + NoLegend()#no labels (to label in photoshop)
+```
+
+## FeaturePlots: view single-cell gene expression across clusters
+```{r message=FALSE, warning=FALSE}
+GOI <- c("Inhba", "Crabp1", "Pdgfra", "Twist2", "Lum", "Dkk2", "Dkk1", "Ly6a", "Dpp4", "Dlk1", "Coch", "Meox2",
+          "Acta2", "Lrrc15", "Rgs5", "Fabp4", "Pecam1", "Mbp", "Sox10", "Msc", "Ttn", "Prdm1", "Pparg", "Itga8",
+          "Tyrp1", "Dct", "Alas2", "Ptprc", "Cd14", "Cd68", "Icos", "Nkg7", "Neurl3", "Epcam", "Fcgr3",
+          "Krt28", "Krt14", "Krt17", "Krt5", "Lef1", "Mki67", "Adipoq", "Cebpa", "Prom1", "Acan",
+          "Gpx3", "Sox2", "Lrig1", "a", "Corin", "Mef2c", "Pdgfrb", "Runx1")
+path_out <- 'W:/Driskell Lab/Thompson et al. 2021/Data/P0 WT/RNA/All Clusters/FeaturePlot/'
+
+## View Gene Expression ##
+tic('FeaturePlot auto-export')
+#Export loop for FeaturePlot() for each Gene in GOI list
+n_plot <- 1
+while (n_plot < length(GOI) + 1) {
+  p1 <- FeaturePlot(object = scRNA_WT,
+                    features = GOI[n_plot],
+                    pt.size = 1.0,
+                    order = TRUE) + 
+    scale_colour_gradientn(colours = magma(22))#iterate through the genes of interest vector inputting their coordinates
+  
+  #print(p1)#spare the markdown file saving tons of plots
+  
+  #save the FeaturePlots automatically
+  ggsave(plot = p1, filename = paste(GOI[n_plot], 'FeaturePlot.png', sep = ' '), path = path_out,
+         width = 6, height = 4, units = 'in')
+  n_plot <- n_plot + 1
+}
+toc()
+```
+
+### check QC metrics
+```{r}
+VlnPlot(scRNA_WT, features = 'percent.mt', group.by = 'seurat_clusters')
+```
+Cluster 12 is overwhelmingly cells with a high percent.mt, suggesting that these are low quality/dying cells that all clustering together due to low reads in non-mitochondrial genes. I subset out cluster 12 and re-cluster the remaining clusters to remove these from downstream analysis.
+
+## Label the Clusters by Cell Type
+```{r message=FALSE, warning=FALSE}
+#updated renaming convention in Seurat 3.0.0+ and Signac 1.0.0+
+new.cluster.ids.wt <- c('0 PF', '1 RF', '2 PF', '3 RF', '4 DP', 
+                     '5 Div Fibro', '6 Keratinocyte', '7 Pericyte', 
+                     '8 BV', '9 Leukocyte', '10 Macrophage',
+                     '11 Schwann Cell', '12 Dying', '13 Erythrocyte',
+                     '14 Pre-adipocyte', '15 Skeletal Muscle', '16 Leukocyte',
+                     '17 BV', '18 Smooth Muscle', '19 DS', '20 Melanocyte')
+names(new.cluster.ids.wt) <- levels(scRNA_WT)
+scRNA_WT <- RenameIdents(scRNA_WT, new.cluster.ids.wt)
+
+## filter out low quality cells ##
+scRNA_WT2 <- subset(scRNA_WT, idents = c("12 Dying"), invert = TRUE)#name low quality/junk clusters to subset out
+
+p1 <- DimPlot(scRNA_WT2, label = FALSE, pt.size = 1.0)#legend w/ new names
+p1
+
+```
+
+## FeaturePlots: view single-cell gene expression across clusters
+```{r message=FALSE, warning=FALSE}
+GOI <- c("Inhba", "Crabp1", "Pdgfra", "Twist2", "Lum", "Dkk2", "Dkk1", "Ly6a", "Dpp4", "Dlk1", "Coch", "Meox2",
+          "Acta2", "Lrrc15", "Rgs5", "Fabp4", "Pecam1", "Mbp", "Sox10", "Msc", "Ttn", "Prdm1", "Pparg", "Itga8",
+          "Tyrp1", "Dct", "Alas2", "Ptprc", "Cd14", "Cd68", "Icos", "Nkg7", "Neurl3", "Epcam", "Fcgr3",
+          "Krt28", "Krt14", "Krt17", "Krt5", "Lef1", "Mki67", "Adipoq", "Cebpa", "Prom1", "Acan",
+          "Gpx3", "Sox2", "Lrig1", "a", "Corin", "Mef2c", "Pdgfrb", "Runx1")
+path_out <- 'W:/Driskell Lab/Thompson et al. 2021/Data/P0 WT/RNA/All Clusters/FeaturePlot/'
+
+## View Gene Expression ##
+tic('FeaturePlot auto-export')
+#Export loop for FeaturePlot() for each Gene in GOI list
+n_plot <- 1
+while (n_plot < length(GOI) + 1) {
+  p1 <- FeaturePlot(object = scRNA_WT2,
+                    features = GOI[n_plot],
+                    pt.size = 2.0,
+                    order = TRUE) + 
+    scale_colour_gradientn(colours = magma(22))#iterate through the genes of interest vector inputting their coordinates
+  
+  #print(p1)#spare the markdown file saving tons of plots
+  
+  #save the FeaturePlots automatically
+  ggsave(plot = p1, filename = paste(GOI[n_plot], 'FeaturePlot.png', sep = ' '), path = path_out,
+         width = 12, height = 8, units = 'in')
+  n_plot <- n_plot + 1
+}
+toc()
+```
+
+
+### Figure Quality and Coloration
+```{r fig.height=8, fig.width=12, message=FALSE, warning=FALSE}
+scRNA_fig <- scRNA_WT2
+
+p2 <- DimPlot(scRNA_WT2, label = TRUE, pt.size = 2.0, 
+              cols = c('#238b45', '#74c476', '#006d2c', '#a1d99b', '#00441b', '#41ab5d', '#225ea8', '#7fcdbb',
+                       '#8c6bb1', '#ef3b2c', '#a50f15', '#fc8d59', '#cb181d', '#bdbdbd', '#f768a1', '#800026',
+                       '#88419d', '#ae017e', '#78c679', '#f16913')) + NoLegend()#blank, manual colors
+p2
+
+
+p2 <- DimPlot(scRNA_WT2, label = FALSE, pt.size = 2.0, 
+              cols = c('#238b45', '#74c476', '#006d2c', '#a1d99b', '#00441b', '#41ab5d', '#225ea8', '#7fcdbb',
+                       '#8c6bb1', '#ef3b2c', '#a50f15', '#fc8d59', '#cb181d', '#bdbdbd', '#f768a1', '#800026',
+                       '#88419d', '#ae017e', '#78c679', '#f16913'))#manual colors w/ legend
+p2
+
+
+
+p2 <- DimPlot(scRNA_WT2, label = FALSE, pt.size = 2.0, 
+              cols = c('#238b45', '#74c476', '#006d2c', '#a1d99b', '#00441b', '#41ab5d', '#225ea8', '#7fcdbb',
+                       '#8c6bb1', '#ef3b2c', '#a50f15', '#fc8d59', '#cb181d', '#bdbdbd', '#f768a1', '#800026',
+                       '#88419d', '#ae017e', '#78c679', '#f16913')) + NoLegend()#blank, manual colors
+p2
+
+
+
+## smaller dots ##
+p2 <- DimPlot(scRNA_WT2, label = TRUE, pt.size = 1.5, 
+              cols = c('#238b45', '#74c476', '#006d2c', '#a1d99b', '#00441b', '#41ab5d', '#225ea8', '#7fcdbb',
+                       '#8c6bb1', '#ef3b2c', '#a50f15', '#fc8d59', '#cb181d', '#bdbdbd', '#f768a1', '#800026',
+                       '#88419d', '#ae017e', '#78c679', '#f16913')) + NoLegend()#blank, manual colors
+p2
+
+
+p2 <- DimPlot(scRNA_WT2, label = FALSE, pt.size = 1.5, 
+              cols = c('#238b45', '#74c476', '#006d2c', '#a1d99b', '#00441b', '#41ab5d', '#225ea8', '#7fcdbb',
+                       '#8c6bb1', '#ef3b2c', '#a50f15', '#fc8d59', '#cb181d', '#bdbdbd', '#f768a1', '#800026',
+                       '#88419d', '#ae017e', '#78c679', '#f16913'))#manual colors w/ legend
+p2
+
+
+p2 <- DimPlot(scRNA_WT2, label = FALSE, pt.size = 1.5, 
+              cols = c('#238b45', '#74c476', '#006d2c', '#a1d99b', '#00441b', '#41ab5d', '#225ea8', '#7fcdbb',
+                       '#8c6bb1', '#ef3b2c', '#a50f15', '#fc8d59', '#cb181d', '#bdbdbd', '#f768a1', '#800026',
+                       '#88419d', '#ae017e', '#78c679', '#f16913')) + NoLegend()#blank, manual colors
+p2
+```
+
+Optional save:
+```{r}
+save(scRNA_WT, file = 'W:/Driskell Lab/Thompson et al. 2021/Data/P0 WT/RNA/Object/scRNA_WT(raw).RData')
+save(scRNA_WT2, file = 'W:/Driskell Lab/Thompson et al. 2021/Data/P0 WT/RNA/Object/scRNA_WT2.RData')
+```
+
+
+## Cluster Markers / Differential Gene Expression (automated)
+### All Clusters, Individually
+```{r, warning=FALSE, message=FALSE}
+#I will use tictoc package to time this chunk, since previous runs have taken multiple hours
+tic('ClusterMarker auto-export loop')#start timer
+
+path_out <- 'W:/Driskell Lab/Thompson et al. 2021/Data/P0 WT/RNA/All Clusters/DEG/'#path to export folder
+
+COI <- c('0 PF', '1 RF', '2 PF', '3 RF', '4 DP', '5 Div Fibro', '6 Keratinocyte', '7 Pericyte', '8 BV', '9 Leukocyte', '10 Macrophage',
+         '11 Schwann Cell', '13 Erythrocyte', '14 Pre-adipocyte', '15 Skeletal Muscle', '16 Leukocyte', '17 BV', 
+         '18 Smooth Muscle', '19 DS', '20 Melanocyte')#define the clusters you wish to know diff. gene expression of
+
+n_loops <- 1
+while (n_loops < length(COI) + 1) {
+#Find positive markers (upregulated genes)
+cluster.markers.temp <- FindMarkers(scRNA_WT2, ident.1 = COI[n_loops], min.pct = 0.05, logfc.threshold = 0.0, assay = 'SCT', only.pos = TRUE)#iterate through the entire COI list
+
+#head(cluster.markers.temp, n = 30)
+cluster.markers.temp$Gene = rownames(cluster.markers.temp)#add a column for the gene name for the promoter score
+cluster.markers.temp$pct.2[cluster.markers.temp$pct.2 == 0] <- NA#corrects pct ratio error if pct.2=0
+cluster.markers.temp <- na.omit(cluster.markers.temp)#remove rows with NA
+cluster.markers.temp$Pct_Ratio = cluster.markers.temp$pct.1 / cluster.markers.temp$pct.2#compute ratio of how much the cluster of interest expresses compared to all others
+cluster.markers.temp <- cluster.markers.temp %>% dplyr::select('Gene', everything())#move gene column to the front of the dataframe
+cluster.markers.temp$'dPct1*dFold' = cluster.markers.temp$Pct_Ratio * cluster.markers.temp$avg_log2FC
+#cluster.markers.temp <- cluster.markers.temp[cluster.markers.temp$`dPct1*dFold` > quantile(cluster.markers.temp$`dPct1*dFold`, 0.95), ]#keep only the top 95% of upregulated genes in ident.1
+cluster.markers.temp <- cluster.markers.temp[order(cluster.markers.temp$`dPct1*dFold`, decreasing = TRUE), ]
+
+write.csv(cluster.markers.temp, file = paste(path_out, COI[n_loops], '_pos_markers.csv', sep = ''), row.names = FALSE)
+
+n_loops <- n_loops + 1#track for when all clusters of one dataset have been run through
+}
+
+toc()#end timer
+```
+
+### Fibroblast supercluster vs all other clusters
+```{r, warning=FALSE, message=FALSE}
+tic('ClusterMarker auto-export loop')#start timer
+
+path_out <- 'W:/Driskell Lab/Thompson et al. 2021/Data/P0 WT/RNA/All Clusters/DEG/'#path to export folder
+
+fibros <- c('0 PF', '1 RF', '2 PF', '3 RF', '4 DP', '5 Div Fibro', '19 DS')#bulk the fibroblast clusters
+
+#Find positive markers (upregulated genes)
+cluster.markers.temp <- FindMarkers(scRNA_WT2, ident.1 = fibros, min.pct = 0.05, logfc.threshold = 0.0, assay = 'SCT', only.pos = TRUE)#Nate's diff. gene expression method
+
+#head(cluster.markers.temp, n = 30)
+cluster.markers.temp$Gene = rownames(cluster.markers.temp)#add a column for the gene name for the promoter score
+cluster.markers.temp$pct.2[cluster.markers.temp$pct.2 == 0] <- NA#corrects pct ratio error if pct.2=0
+cluster.markers.temp <- na.omit(cluster.markers.temp)#remove rows with NA
+cluster.markers.temp$Pct_Ratio = cluster.markers.temp$pct.1 / cluster.markers.temp$pct.2#compute ratio of how much the cluster of interest expresses compared to all others
+cluster.markers.temp <- cluster.markers.temp %>% dplyr::select('Gene', everything())#move gene column to the front of the dataframe
+cluster.markers.temp$'dPct1*dFold' = cluster.markers.temp$Pct_Ratio * cluster.markers.temp$avg_log2FC
+#cluster.markers.temp <- cluster.markers.temp[cluster.markers.temp$`dPct1*dFold` > quantile(cluster.markers.temp$`dPct1*dFold`, 0.95), ]#keep only the top 95% of upregulated genes in ident.1
+cluster.markers.temp <- cluster.markers.temp[order(cluster.markers.temp$`dPct1*dFold`, decreasing = TRUE), ]
+
+write.csv(cluster.markers.temp, file = paste(path_out, 'fibroblasts_pos_markers.csv', sep = ''), row.names = FALSE)
+
+cluster.markers.temp2 <- cluster.markers.temp2[cluster.markers.temp2$dPct1.dFold > quantile(cluster.markers.temp2$dPct1.dFold, 0.95), ]#filter rows to top 5% of DEGs
+cluster.markers.temp2 <- cluster.markers.temp2[cluster.markers.temp2$pct.1 >= 0.1, ]#filter out DEGs only expressed in <10% of the cluster, since these are less likely to be 
+
+write.csv(cluster.markers.temp2, file = paste(path_out, 'fibroblasts_pos_markers.csv', sep = ''), row.names = FALSE)
+
+
+toc()#end timer
+
+```
+
+### We need to now filter the DEGs in a standardized manner
+Since we want to rank by both the upregulation of expression and ratio of cluster to all other clusters' cells w/ reads, we need to filter the dataset (can't set a min.pct that is high b/c FindMarkers will ignore genes w/ pct.2 less than min.pct and these could be important if pct.2 is a non-zero). We will filter to keep DEGs w/ reads in more than 10% of the cells in the given cluster since these are likely to be biologically relevant and not a byproduct of a high pct.1/pct.2 ratio (e.g. 0.05 / 0.001 will give a high ratio and skew the score). By filtering to the top 5%, we typically get a couple hundred DEGs for each cluster for downstream analysis.
+```{r message=FALSE, warning=FALSE}
+tic('filtering')
+
+path_out <- 'W:/Driskell Lab/Thompson et al. 2021/Data/P0 WT/RNA/All Clusters/DEG/filtered/'#path to export folder
+path_in <- 'W:/Driskell Lab/Thompson et al. 2021/Data/P0 WT/RNA/All Clusters/DEG/'
+COI <- c('0 PF', '1 RF', '2 PF', '3 RF', '4 DP', '5 Div Fibro', '6 Keratinocyte', '7 Pericyte', '8 BV', '9 Leukocyte', '10 Macrophage',
+         '11 Schwann Cell', '13 Erythrocyte', '14 Pre-adipocyte', '15 Skeletal Muscle', '16 Leukocyte', '17 BV', 
+         '18 Smooth Muscle', '19 DS', '20 Melanocyte', 'fibroblasts')#define the clusters you wish to know diff. gene expression of
+plan('multisession', workers = 1)#rare bug where workers > 1 causes error in FindMarkers (Error in serialize(data, node$con, xdr = FALSE) : error writing to connection)
+
+n_loops <- 1
+while (n_loops < length(COI) + 1) {
+#Find positive markers (upregulated genes)
+cluster.markers.temp <- read.csv(file = paste(path_in, COI[n_loops], '_pos_markers.csv', sep = ''))
+cluster.markers.temp <- cluster.markers.temp[cluster.markers.temp$dPct1.dFold > quantile(cluster.markers.temp$dPct1.dFold, 0.95), ]#filter rows to top 5% of DEGs
+cluster.markers.temp <- cluster.markers.temp[cluster.markers.temp$pct.1 >= 0.1, ]#filter out DEGs only expressed in <10% of the cluster, since these are less likely to be  TRUE)#Nate's diff. gene expression method
+
+write.csv(cluster.markers.temp, file = paste(path_out, COI[n_loops], '_pos_markers_filtered.csv', sep = ''), row.names = FALSE)
+
+n_loops <- n_loops + 1#track for when all clusters of one dataset have been run through
+}
+
+toc()#end timer
+
+```
+
+
+
+# 2. Subset the fibroblasts
+Now that we have identified the cell types present in the dataset, subset the fibroblasts for closer investigation.
+```{r message=FALSE, warning=FALSE}
+scRNA_WT_fibro <- subset(scRNA_WT2, idents = c('0 PF', '1 RF', '2 PF', '3 RF', '4 DP', '5 Div Fibro', '19 DS'), invert = FALSE)
+scRNA_WT_fibro#view the subset
+
+## We want to renormalize the data to bring out the heterogenetiy within the lineage
+#Run sctransform (replaces NormalizeData, ScaleData, and FindVariableFeatures + RegressOut argument of ScaleData)
+tic('Running SCTransform')
+scRNA_WT_fibro <- SCTransform(scRNA_WT_fibro, vars.to.regress = "percent.mt", verbose = FALSE)
+toc()
+
+#Dimensional Reduction and Elbow Plot
+scRNA_WT_fibro <- RunPCA(scRNA_WT_fibro, verbose = FALSE)
+ElbowPlot(scRNA_WT_fibro, ndims = 50)
+```
+
+Based on ElbowPlot, pick major PCs for next steps (Standard Deviation > 5)
+```{r message=FALSE, warning=FALSE}
+tic('Running UMAPs')
+#run the UMAP function using dimensions informed by elbow plot
+scRNA_WT_fibro <- RunUMAP(scRNA_WT_fibro, dims = 1:30, verbose = FALSE, umap.method = "umap-learn", metric = "correlation")#default is dims = 1:30
+
+#Higher PCs (dims=1:30) can represent subtle but relevant sources of heterogeneity
+scRNA_WT_fibro <- FindNeighbors(scRNA_WT_fibro, dims = 1:30, verbose = FALSE)
+scRNA_WT_fibro <- FindClusters(scRNA_WT_fibro, verbose = FALSE, algorithm = 3, resolution = 0.8)#default is algorithm = 1 (Louvain), 3 = SLM
+toc()
+
+DimPlot(scRNA_WT_fibro, label = TRUE, pt.size = 1.0, label.size = 6) + NoLegend()#numbers on clusters
+DimPlot(scRNA_WT_fibro, label = FALSE, pt.size = 1.0) + NoLegend()#no labels (to label in photoshop)
+#DimPlot(scRNA_WT_fibro, label = FALSE)#no numbers on clusters, legend off to side
+```
+
+### QC
+Before we adjust resolution, we should check the quality of the single cells in the fibroblast subcluster.
+```{r message=FALSE, warning=FALSE}
+VlnPlot(
+  object = scRNA_WT_fibro,
+  features = c('percent.mt', 'nFeature_SCT'),
+  group.by = 'seurat_clusters',
+  pt.size = 0.2, ncol = 2)
+
+FeaturePlot(scRNA_WT_fibro, features = 'percent.mt')
+```
+All of the outliers have clustered together in this island-like group of cells with high percent.mt and low nFeature. We will now subset them out before reclustering the fibroblast subset without the influence of the outliers.
+
+### Subset out the outlier high mitochondrial gene cluster
+```{r}
+scRNA_WT_fibro2 <- subset(scRNA_WT_fibro, idents = c('10'), invert = TRUE)#select the cluster to remove
+```
+With the outliers removed, we should run UMAP again to get clustering w/o the influence of the outliers
+
+### Re-cluster, SCTransform
+```{r message=FALSE, warning=FALSE}
+## We want to renormalize the data to bring out the heterogenetiy within the lineage
+#Run sctransform (replaces NormalizeData, ScaleData, and FindVariableFeatures + RegressOut argument of ScaleData)
+tic('Running SCTransform')
+scRNA_WT_fibro2 <- SCTransform(scRNA_WT_fibro2, vars.to.regress = "percent.mt", verbose = FALSE)
+
+#Dimensional Reduction and Elbow Plot
+scRNA_WT_fibro2 <- RunPCA(scRNA_WT_fibro2, verbose = FALSE)
+ElbowPlot(scRNA_WT_fibro2, ndims = 50)
+
+toc()
+```
+PCs 1:30 are still StdDev >= 5 so we will use those again.
+
+### UMAP
+```{r message=FALSE, warning=FALSE}
+## UMAP ##
+#tic('Running UMAPs')
+#run the UMAP function using dimensions informed by elbow plot
+scRNA_WT_fibro2 <- RunUMAP(scRNA_WT_fibro2, dims = 1:30, verbose = FALSE, umap.method = "umap-learn", metric = "correlation")#default is dims = 1:30
+
+#Higher PCs (dims=1:30) can represent subtle but relevant sources of heterogeneity
+scRNA_WT_fibro2 <- FindNeighbors(scRNA_WT_fibro2, dims = 1:30, verbose = FALSE)
+scRNA_WT_fibro2 <- FindClusters(scRNA_WT_fibro2, verbose = FALSE, algorithm = 3, resolution = .8)#default is algorithm = 1 (Louvain), 3 = SLM; res = 0.8 is Seurat default
+#toc()
+
+DimPlot(scRNA_WT_fibro2, label = TRUE, pt.size = 1.0, label.size = 6) + NoLegend()#numbers on clusters
+DimPlot(scRNA_WT_fibro2, label = FALSE, pt.size = 1.0) + NoLegend()#no labels (to label in photoshop)
+#DimPlot(scRNA_WT_fibro2, label = FALSE)#no numbers on clusters, legend off to side
+```
+
+
+### Resolution
+```{r message=FALSE, warning=FALSE}
+scRNA_WT_fibro2 <- FindClusters(scRNA_WT_fibro2, verbose = FALSE, algorithm = 3, resolution = .5)#default is algorithm = 1 (Louvain), 3 = SLM
+
+DimPlot(scRNA_WT_fibro2, label = TRUE, pt.size = 1.0, label.size = 6) + NoLegend()#numbers on clusters
+DimPlot(scRNA_WT_fibro2, label = FALSE, pt.size = 1.0) + NoLegend()#no labels (to label in photoshop)
+```
+
+## FeaturePlots: view single-cell gene expression across clusters
+```{r message=FALSE, warning=FALSE}
+GOI <- c("Inhba", "Crabp1", "Pdgfra", "Twist2", "Lum", "Dkk2", "Dkk1", "Ly6a", "Dpp4", "Dlk1", "Coch", "Meox2",
+          "Acta2", "Lrrc15", "Fabp4", "Prdm1", "Pparg", "Itga8", "En1", "Itga6",
+         "Lef1", "Mki67", "Adipoq", "Gpx3", "Sox2", "Lrig1", "a", "Corin", "Mef2c")
+path_out <- 'W:/Driskell Lab/Thompson et al. 2021/Data/P0 WT/RNA/Fibroblasts/FeaturePlot/'
+
+## View WT Gene Expression ##
+tic('FeaturePlot auto-export')
+#Export loop for FeaturePlot() for each Gene in GOI list
+n_plot <- 1
+while (n_plot < length(GOI) + 1) {
+  p1 <- FeaturePlot(object = scRNA_WT_fibro2,
+                    features = GOI[n_plot],
+                    pt.size = 1.0,
+                    order = TRUE) + 
+    scale_colour_gradientn(colours = magma(50))#iterate through the genes of interest vector inputting their coordinates
+  
+  #print(p1)#spare the markdown file saving tons of plots
+  
+  #save the FeaturePlots automatically
+  ggsave(plot = p1, filename = paste(GOI[n_plot], 'FeaturePlot.png', sep = ' '), path = path_out,
+         width = 12, height = 8, units = 'cm')
+  n_plot <- n_plot + 1
+}
+toc()
+```
+
+### Label the fibroblast subclusters
+```{r message=FALSE, warning=FALSE}
+#updated renaming convention in Seurat 3.0.0+ and Signac 1.0.0+
+new.cluster.ids.wt <- c('0 Crabp1 PF', '1 RF', '2 PF', '3 DP', '4 Dkk2 PF', '5 Div Fibro', 
+                         '6 Adipo RF', '7 Fascia RF', '8 Div Fibro', '9 APM')
+names(new.cluster.ids.wt) <- levels(scRNA_WT_fibro2)
+scRNA_WT_fibro2 <- RenameIdents(scRNA_WT_fibro2, new.cluster.ids.wt)
+
+DimPlot(scRNA_WT_fibro2, label = TRUE, pt.size = 1.0) + NoLegend()
+DimPlot(scRNA_WT_fibro2, label = FALSE, pt.size = 1.0)#legend w/ new names
+```
+SAVE THE SUBSET OBJECT NOW!!!
+```{r}
+save(scRNA_WT_fibro, file = 'W:/Driskell Lab/Thompson et al. 2021/Data/P0 WT/RNA/Fibroblasts/Object/scRNA_WT_fibro.RData')#w/ outlier
+save(scRNA_WT_fibro2, file = 'W:/Driskell Lab/Thompson et al. 2021/Data/P0 WT/RNA/Fibroblasts/Object/scRNA_WT_fibro2.RData')#outlier removed <-----
+```
+
+# Figure Building
+I want to manually color the fibroblast subset clusters.
+```{r fig.height=8, fig.width=12}
+print(DimPlot(scRNA_WT_fibro2, cols = c("#006837", "#f46d43", "#66bd63", "#3288bd", "#1a9850", "#bf812d", "#d53e4f", "#8e0152", "#8c510a", "#5e4fa2"), pt.size = 1.0) + NoLegend())
+print(DimPlot(scRNA_WT_fibro2, cols = c("#006837", "#f46d43", "#66bd63", "#3288bd", "#1a9850", "#bf812d", "#d53e4f", "#8e0152", "#8c510a", "#5e4fa2")) + NoLegend())
+print(DimPlot(scRNA_WT_fibro2, cols = c("#006837", "#f46d43", "#66bd63", "#3288bd", "#1a9850", "#bf812d", "#d53e4f", "#8e0152", "#8c510a", "#5e4fa2"), pt.size = 1.5) + NoLegend())
+```
+
+
+## Differential Gene Expression (DEG) Analysis of Fibroblasts
+### Cluster Markers / Differential Gene Expression (automated)
+Take note of how many clusters are in each dataset to use for the automated ClusterMarker chunk (legend in DimPlot can help)
+```{r, warning=FALSE, message=FALSE}
+#I will use tictoc package to time this chunk, since previous runs have taken multiple hours
+tic('ClusterMarker auto-export loop')#start timer
+
+path_out <- 'W:/Driskell Lab/Thompson et al. 2021/Data/P0 WT/RNA/Fibroblasts/DEG/'#path to export folder
+
+COI <- c('0 Crabp1 PF', '1 RF', '2 PF', '3 DP', '4 Dkk2 PF', '5 Div Fibro', 
+                         '6 Adipo RF', '7 Fascia RF', '8 Div Fibro', '9 APM')#define the clusters you wish to know diff. gene expression of
+
+n_loops <- 1
+while (n_loops < length(COI) + 1) {
+#Find positive markers (upregulated genes)
+cluster.markers.temp <- FindMarkers(scRNA_WT_fibro2, ident.1 = COI[n_loops], min.pct = 0.05, logfc.threshold = 0.0, assay = 'SCT', only.pos = TRUE)#Nate's diff. gene expression method
+
+#head(cluster.markers.temp, n = 30)
+cluster.markers.temp$Gene = rownames(cluster.markers.temp)#add a column for the gene name for the promoter score
+cluster.markers.temp$pct.2[cluster.markers.temp$pct.2 == 0] <- NA#corrects pct ratio error if pct.2=0
+cluster.markers.temp <- na.omit(cluster.markers.temp)#remove rows with NA
+cluster.markers.temp$Pct_Ratio = cluster.markers.temp$pct.1 / cluster.markers.temp$pct.2#compute ratio of how much the cluster of interest expresses compared to all others
+cluster.markers.temp <- cluster.markers.temp %>% dplyr::select('Gene', everything())#move gene column to the front of the dataframe
+cluster.markers.temp$'dPct1*dFold' = cluster.markers.temp$Pct_Ratio * cluster.markers.temp$avg_log2FC
+#cluster.markers.temp <- cluster.markers.temp[cluster.markers.temp$`dPct1*dFold` > quantile(cluster.markers.temp$`dPct1*dFold`, 0.95), ]#keep only the top 95% of upregulated genes in ident.1
+cluster.markers.temp <- cluster.markers.temp[order(cluster.markers.temp$`dPct1*dFold`, decreasing = TRUE), ]
+
+write.csv(cluster.markers.temp, file = paste(path_out, COI[n_loops], '_pos_markers.csv', sep = ''), row.names = FALSE)
+
+n_loops <- n_loops + 1#track for when all clusters of one dataset have been run through
+}
+
+toc()#end timer
+```
+
+
+##. Papillary vs. Reticular fibroblast lineages: PFs vs RFs
+At P0, we see that there is considerable heterogeneity within these two canonically distinct functional/transcriptional lineages. In the previous chunk, I defined the most significant differentially expressed genes in all the fibroblast clusters. Here, I will focus on the big picture DEGs between the PF clusters and the RF clusters.
+```{r message=FALSE, warning=FALSE}
+#I will use tictoc package to time this chunk since FindMarkers can take a while
+tic('ClusterMarker auto-export loop')#start timer
+
+path_out <- 'W:/Driskell Lab/Thompson et al. 2021/Data/P0 WT/RNA/Fibroblasts/DEG/PFvsRF/'#path to export folder
+COI_PF <- c('0 Crabp1 PF', '2 PF', '4 Dkk2 PF')#define the group of PF clusters
+COI_RF <- c('1 RF', '6 Adipo RF', '7 Fascia RF')#define the group of RF clusters
+
+## PF Markers ##
+cluster.markers.temp <- FindMarkers(scRNA_WT_fibro2, ident.1 = COI_PF, ident.2 = COI_RF,
+                                    min.pct = 0.05, logfc.threshold = 0.0, assay = 'SCT', only.pos = TRUE)
+
+cluster.markers.temp$Gene = rownames(cluster.markers.temp)#add a column for the gene name for the promoter score
+cluster.markers.temp$pct.2[cluster.markers.temp$pct.2 == 0] <- NA#corrects pct ratio error if pct.2=0
+cluster.markers.temp <- na.omit(cluster.markers.temp)#remove rows with NA
+cluster.markers.temp$Pct_Ratio = cluster.markers.temp$pct.1 / cluster.markers.temp$pct.2#compute ratio of how much the cluster of interest expresses compared to all others
+cluster.markers.temp <- cluster.markers.temp %>% dplyr::select('Gene', everything())#move gene column to the front of the dataframe
+cluster.markers.temp$'dPct1*dFold' = cluster.markers.temp$Pct_Ratio * cluster.markers.temp$avg_log2FC
+#cluster.markers.temp <- cluster.markers.temp[cluster.markers.temp$`dPct1*dFold` > quantile(cluster.markers.temp$`dPct1*dFold`, 0.95), ]#keep only the top 95% of upregulated genes in ident.1
+cluster.markers.temp <- cluster.markers.temp[order(cluster.markers.temp$`dPct1*dFold`, decreasing = TRUE), ]
+
+write.csv(cluster.markers.temp, file = paste(path_out, 'PF_not_RF_markers.csv', sep = ''), row.names = FALSE)
+
+
+## RF Markers ##
+cluster.markers.temp <- FindMarkers(scRNA_WT_fibro2, ident.1 = COI_RF, ident.2 = COI_PF,
+                                    min.pct = 0.05, logfc.threshold = 0.0, assay = 'SCT', only.pos = TRUE)
+
+cluster.markers.temp$Gene = rownames(cluster.markers.temp)#add a column for the gene name for the promoter score
+cluster.markers.temp$pct.2[cluster.markers.temp$pct.2 == 0] <- NA#corrects pct ratio error if pct.2=0
+cluster.markers.temp <- na.omit(cluster.markers.temp)#remove rows with NA
+cluster.markers.temp$Pct_Ratio = cluster.markers.temp$pct.1 / cluster.markers.temp$pct.2#compute ratio of how much the cluster of interest expresses compared to all others
+cluster.markers.temp <- cluster.markers.temp %>% dplyr::select('Gene', everything())#move gene column to the front of the dataframe
+cluster.markers.temp$'dPct1*dFold' = cluster.markers.temp$Pct_Ratio * cluster.markers.temp$avg_log2FC
+#cluster.markers.temp <- cluster.markers.temp[cluster.markers.temp$`dPct1*dFold` > quantile(cluster.markers.temp$`dPct1*dFold`, 0.95), ]#keep only the top 95% of upregulated genes in ident.1
+cluster.markers.temp <- cluster.markers.temp[order(cluster.markers.temp$`dPct1*dFold`, decreasing = TRUE), ]
+
+write.csv(cluster.markers.temp, file = paste(path_out, 'RF_not_PF_markers.csv', sep = ''), row.names = FALSE)
+
+toc()#end timer
+```
+
+
+

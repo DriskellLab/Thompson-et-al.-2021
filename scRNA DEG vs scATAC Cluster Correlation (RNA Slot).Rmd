@@ -1,0 +1,627 @@
+---
+title: "scRNA DEG vs. scATAC Cluster Correlation (RNA Slot)"
+output: html_notebook
+---
+
+
+# Get a list object of the top scRNA clusters' DEGs (ALL CLUSTERS)
+```{r}
+path_in <- 'W:/Driskell Lab/Thompson et al. 2021/Data/P0 WT/RNA/All Clusters/DEG/'
+COI <- c('0 PF', '1 RF', '2 PF', '3 RF', '4 DP', '5 Div Fibro', '6 Keratinocyte', '7 Pericyte',  '8 BV', 
+         '9 Leukocyte', '10 Macrophage', '11 Schwann Cell', '13 Erythrocyte', '14 Pre-adipocyte', 
+         '15 Skeletal Muscle', '16 Leukocyte', '17 BV', '18 Smooth Muscle', '19 DS', '20 Melanocyte')#define the cluster IDs from scRNA
+
+atac_genes <- scATAC_WT3@assays$RNA@data@Dimnames[[1]]
+
+c0_markers <- read.csv(file = paste(path_in, COI[1], '_pos_markers.csv', sep = ''))
+c0_markers <- c0_markers[c0_markers$dPct1.dFold > quantile(c0_markers$dPct1.dFold, 0.95), ]#filter rows to top 5% of DEGs
+c0_markers <- c0_markers[c0_markers$pct.1 >= 0.1, ]#filter out DEGs only expressed in <10% of the cluster, since these are less likely to be relevant
+c0_markers <- c0_markers[(c0_markers$Gene %in% atac_genes), ]#keep rows of genes found in both datasets
+#write.csv(c0_markers, file = paste(path_in, COI[1], '_pos_markers_READY2Int.csv', sep = ''))
+
+c1_markers <- read.csv(file = paste(path_in, COI[2], '_pos_markers.csv', sep = ''))
+c1_markers <- c1_markers[c1_markers$dPct1.dFold > quantile(c1_markers$dPct1.dFold, 0.95), ]#filter rows to top 5% of DEGs
+c1_markers <- c1_markers[c1_markers$pct.1 >= 0.1, ]#filter out DEGs only expressed in <10% of the cluster, since these are less likely to be relevant
+c1_markers <- c1_markers[(c1_markers$Gene %in% atac_genes), ]#keep rows of genes found in both datasets
+#write.csv(c1_markers, file = paste(path_in, COI[2], '_pos_markers_READY2Int.csv', sep = ''))
+
+c2_markers <- read.csv(file = paste(path_in, COI[3], '_pos_markers.csv', sep = ''))
+c2_markers <- c2_markers[c2_markers$dPct1.dFold > quantile(c2_markers$dPct1.dFold, 0.95), ]#filter rows to top 5% of DEGs
+c2_markers <- c2_markers[c2_markers$pct.1 >= 0.1, ]#filter out DEGs only expressed in <10% of the cluster, since these are less likely to be relevant
+c2_markers <- c2_markers[(c2_markers$Gene %in% atac_genes), ]#keep rows of genes found in both datasets
+#write.csv(c2_markers, file = paste(path_in, COI[3], '_pos_markers_READY2Int.csv', sep = ''))
+
+c3_markers <- read.csv(file = paste(path_in, COI[4], '_pos_markers.csv', sep = ''))
+c3_markers <- c3_markers[c3_markers$dPct1.dFold > quantile(c3_markers$dPct1.dFold, 0.95), ]#filter rows to top 5% of DEGs
+c3_markers <- c3_markers[c3_markers$pct.1 >= 0.1, ]#filter out DEGs only expressed in <10% of the cluster, since these are less likely to be relevant
+c3_markers <- c3_markers[(c3_markers$Gene %in% atac_genes), ]#keep rows of genes found in both datasets
+#write.csv(c3_markers, file = paste(path_in, COI[4], '_pos_markers_READY2Int.csv', sep = ''))
+
+c4_markers <- read.csv(file = paste(path_in, COI[5], '_pos_markers.csv', sep = ''))
+c4_markers <- c4_markers[c4_markers$dPct1.dFold > quantile(c4_markers$dPct1.dFold, 0.95), ]#filter rows to top 5% of DEGs
+c4_markers <- c4_markers[c4_markers$pct.1 >= 0.1, ]#filter out DEGs only expressed in <10% of the cluster, since these are less likely to be relevant
+c4_markers <- c4_markers[(c4_markers$Gene %in% atac_genes), ]#keep rows of genes found in both datasets
+#write.csv(c4_markers, file = paste(path_in, COI[5], '_pos_markers_READY2Int.csv', sep = ''))
+
+c5_markers <- read.csv(file = paste(path_in, COI[6], '_pos_markers.csv', sep = ''))
+c5_markers <- c5_markers[c5_markers$dPct1.dFold > quantile(c5_markers$dPct1.dFold, 0.95), ]#filter rows to top 5% of DEGs
+c5_markers <- c5_markers[c5_markers$pct.1 >= 0.1, ]#filter out DEGs only expressed in <10% of the cluster, since these are less likely to be relevant
+c5_markers <- c5_markers[(c5_markers$Gene %in% atac_genes), ]#keep rows of genes found in both datasets
+#write.csv(c5_markers, file = paste(path_in, COI[6], '_pos_markers_READY2Int.csv', sep = ''))
+
+c6_markers <- read.csv(file = paste(path_in, COI[7], '_pos_markers.csv', sep = ''))
+c6_markers <- c6_markers[c6_markers$dPct1.dFold > quantile(c6_markers$dPct1.dFold, 0.95), ]#filter rows to top 5% of DEGs
+c6_markers <- c6_markers[c6_markers$pct.1 >= 0.1, ]#filter out DEGs only expressed in <10% of the cluster, since these are less likely to be relevant
+c6_markers <- c6_markers[(c6_markers$Gene %in% atac_genes), ]#keep rows of genes found in both datasets
+#write.csv(c6_markers, file = paste(path_in, COI[7], '_pos_markers_READY2Int.csv', sep = ''))
+
+c7_markers <- read.csv(file = paste(path_in, COI[8], '_pos_markers.csv', sep = ''))
+c7_markers <- c7_markers[c7_markers$dPct1.dFold > quantile(c7_markers$dPct1.dFold, 0.95), ]#filter rows to top 5% of DEGs
+c7_markers <- c7_markers[c7_markers$pct.1 >= 0.1, ]#filter out DEGs only expressed in <10% of the cluster, since these are less likely to be relevant
+c7_markers <- c7_markers[(c7_markers$Gene %in% atac_genes), ]#keep rows of genes found in both datasets
+#write.csv(c7_markers, file = paste(path_in, COI[8], '_pos_markers_READY2Int.csv', sep = ''))
+
+c8_markers <- read.csv(file = paste(path_in, COI[9], '_pos_markers.csv', sep = ''))
+c8_markers <- c8_markers[c8_markers$dPct1.dFold > quantile(c8_markers$dPct1.dFold, 0.95), ]#filter rows to top 5% of DEGs
+c8_markers <- c8_markers[c8_markers$pct.1 >= 0.1, ]#filter out DEGs only expressed in <10% of the cluster, since these are less likely to be relevant
+c8_markers <- c8_markers[(c8_markers$Gene %in% atac_genes), ]#keep rows of genes found in both datasets
+#write.csv(c8_markers, file = paste(path_in, COI[9], '_pos_markers_READY2Int.csv', sep = ''))
+
+c9_markers <- read.csv(file = paste(path_in, COI[10], '_pos_markers.csv', sep = ''))
+c9_markers <- c9_markers[c9_markers$dPct1.dFold > quantile(c9_markers$dPct1.dFold, 0.95), ]#filter rows to top 5% of DEGs
+c9_markers <- c9_markers[c9_markers$pct.1 >= 0.1, ]#filter out DEGs only expressed in <10% of the cluster, since these are less likely to be relevant
+c9_markers <- c9_markers[(c9_markers$Gene %in% atac_genes), ]#keep rows of genes found in both datasets
+#write.csv(c9_markers, file = paste(path_in, COI[10], '_pos_markers_READY2Int.csv', sep = ''))
+
+c10_markers <- read.csv(file = paste(path_in, COI[11], '_pos_markers.csv', sep = ''))
+c10_markers <- c10_markers[c10_markers$dPct1.dFold > quantile(c10_markers$dPct1.dFold, 0.95), ]#filter rows to top 5% of DEGs
+c10_markers <- c10_markers[c10_markers$pct.1 >= 0.1, ]#filter out DEGs only expressed in <10% of the cluster, since these are less likely to be relevant
+c10_markers <- c10_markers[(c10_markers$Gene %in% atac_genes), ]#keep rows of genes found in both datasets
+#write.csv(c10_markers, file = paste(path_in, COI[11], '_pos_markers_READY2Int.csv', sep = ''))
+
+c11_markers <- read.csv(file = paste(path_in, COI[12], '_pos_markers.csv', sep = ''))
+c11_markers <- c11_markers[c11_markers$dPct1.dFold > quantile(c11_markers$dPct1.dFold, 0.95), ]#filter rows to top 5% of DEGs
+c11_markers <- c11_markers[c11_markers$pct.1 >= 0.1, ]#filter out DEGs only expressed in <10% of the cluster, since these are less likely to be relevant
+c11_markers <- c11_markers[(c11_markers$Gene %in% atac_genes), ]#keep rows of genes found in both datasets
+#write.csv(c11_markers, file = paste(path_in, COI[12], '_pos_markers_READY2Int.csv', sep = ''))
+
+c12_markers <- read.csv(file = paste(path_in, COI[13], '_pos_markers.csv', sep = ''))
+c12_markers <- c12_markers[c12_markers$dPct1.dFold > quantile(c12_markers$dPct1.dFold, 0.95), ]#filter rows to top 5% of DEGs
+c12_markers <- c12_markers[c12_markers$pct.1 >= 0.1, ]#filter out DEGs only expressed in <10% of the cluster, since these are less likely to be relevant
+c12_markers <- c12_markers[(c12_markers$Gene %in% atac_genes), ]#keep rows of genes found in both datasets
+#write.csv(c12_markers, file = paste(path_in, COI[13], '_pos_markers_READY2Int.csv', sep = ''))
+
+c13_markers <- read.csv(file = paste(path_in, COI[14], '_pos_markers.csv', sep = ''))
+c13_markers <- c13_markers[c13_markers$dPct1.dFold > quantile(c13_markers$dPct1.dFold, 0.95), ]#filter rows to top 5% of DEGs
+c13_markers <- c13_markers[c13_markers$pct.1 >= 0.1, ]#filter out DEGs only expressed in <10% of the cluster, since these are less likely to be relevant
+c13_markers <- c13_markers[(c13_markers$Gene %in% atac_genes), ]#keep rows of genes found in both datasets
+#write.csv(c13_markers, file = paste(path_in, COI[14], '_pos_markers_READY2Int.csv', sep = ''))
+
+c14_markers <- read.csv(file = paste(path_in, COI[15], '_pos_markers.csv', sep = ''))
+c14_markers <- c14_markers[c14_markers$dPct1.dFold > quantile(c14_markers$dPct1.dFold, 0.95), ]#filter rows to top 5% of DEGs
+c14_markers <- c14_markers[c14_markers$pct.1 >= 0.1, ]#filter out DEGs only expressed in <10% of the cluster, since these are less likely to be relevant
+c14_markers <- c14_markers[(c14_markers$Gene %in% atac_genes), ]#keep rows of genes found in both datasets
+#write.csv(c14_markers, file = paste(path_in, COI[15], '_pos_markers_READY2Int.csv', sep = ''))
+
+c15_markers <- read.csv(file = paste(path_in, COI[16], '_pos_markers.csv', sep = ''))
+c15_markers <- c15_markers[c15_markers$dPct1.dFold > quantile(c15_markers$dPct1.dFold, 0.95), ]#filter rows to top 5% of DEGs
+c15_markers <- c15_markers[c15_markers$pct.1 >= 0.1, ]#filter out DEGs only expressed in <10% of the cluster, since these are less likely to be relevant
+c15_markers <- c15_markers[(c15_markers$Gene %in% atac_genes), ]#keep rows of genes found in both datasets
+#write.csv(c15_markers, file = paste(path_in, COI[16], '_pos_markers_READY2Int.csv', sep = ''))
+
+c16_markers <- read.csv(file = paste(path_in, COI[17], '_pos_markers.csv', sep = ''))
+c16_markers <- c16_markers[c16_markers$dPct1.dFold > quantile(c16_markers$dPct1.dFold, 0.95), ]#filter rows to top 5% of DEGs
+c16_markers <- c16_markers[c16_markers$pct.1 >= 0.1, ]#filter out DEGs only expressed in <10% of the cluster, since these are less likely to be relevant
+c16_markers <- c16_markers[(c16_markers$Gene %in% atac_genes), ]#keep rows of genes found in both datasets
+#write.csv(c16_markers, file = paste(path_in, COI[17], '_pos_markers_READY2Int.csv', sep = ''))
+
+c17_markers <- read.csv(file = paste(path_in, COI[18], '_pos_markers.csv', sep = ''))
+c17_markers <- c17_markers[c17_markers$dPct1.dFold > quantile(c17_markers$dPct1.dFold, 0.95), ]#filter rows to top 5% of DEGs
+c17_markers <- c17_markers[c17_markers$pct.1 >= 0.1, ]#filter out DEGs only expressed in <10% of the cluster, since these are less likely to be relevant
+c17_markers <- c17_markers[(c17_markers$Gene %in% atac_genes), ]#keep rows of genes found in both datasets
+#write.csv(c17_markers, file = paste(path_in, COI[18], '_pos_markers_READY2Int.csv', sep = ''))
+
+c18_markers <- read.csv(file = paste(path_in, COI[19], '_pos_markers.csv', sep = ''))
+c18_markers <- c18_markers[c18_markers$dPct1.dFold > quantile(c18_markers$dPct1.dFold, 0.95), ]#filter rows to top 5% of DEGs
+c18_markers <- c18_markers[c18_markers$pct.1 >= 0.1, ]#filter out DEGs only expressed in <10% of the cluster, since these are less likely to be relevant
+c18_markers <- c18_markers[(c18_markers$Gene %in% atac_genes), ]#keep rows of genes found in both datasets
+#write.csv(c18_markers, file = paste(path_in, COI[18], '_pos_markers_READY2Int.csv', sep = ''))
+
+c19_markers <- read.csv(file = paste(path_in, COI[20], '_pos_markers.csv', sep = ''))
+c19_markers <- c19_markers[c19_markers$dPct1.dFold > quantile(c19_markers$dPct1.dFold, 0.95), ]#filter rows to top 5% of DEGs
+c19_markers <- c19_markers[c19_markers$pct.1 >= 0.1, ]#filter out DEGs only expressed in <10% of the cluster, since these are less likely to be relevant
+c19_markers <- c19_markers[(c19_markers$Gene %in% atac_genes), ]#keep rows of genes found in both datasets
+#write.csv(c19_markers, file = paste(path_in, COI[20], '_pos_markers_READY2Int.csv', sep = ''))
+
+
+## extract the column of DEG names from the given cluster ##
+c0_DEG <- c0_markers$Gene
+c1_DEG <- c1_markers$Gene
+c2_DEG <- c2_markers$Gene
+c3_DEG <- c3_markers$Gene
+c4_DEG <- c4_markers$Gene
+c5_DEG <- c5_markers$Gene
+c6_DEG <- c6_markers$Gene
+c7_DEG <- c7_markers$Gene
+c8_DEG <- c8_markers$Gene
+c9_DEG <- c9_markers$Gene
+c10_DEG <- c10_markers$Gene
+c11_DEG <- c11_markers$Gene
+c12_DEG <- c12_markers$Gene
+c13_DEG <- c13_markers$Gene
+c14_DEG <- c14_markers$Gene
+c15_DEG <- c15_markers$Gene
+c16_DEG <- c16_markers$Gene
+c17_DEG <- c17_markers$Gene
+c18_DEG <- c18_markers$Gene
+c19_DEG <- c19_markers$Gene
+
+DEG_obj <- list(c0_DEG, c1_DEG, c2_DEG, c3_DEG, c4_DEG, c5_DEG, c6_DEG, c7_DEG, c8_DEG, c9_DEG,
+                c10_DEG, c11_DEG, c12_DEG, c13_DEG, c14_DEG, c15_DEG, c16_DEG, c17_DEG, c18_DEG, c19_DEG)#create a list object of the DEG vectors
+
+DEG_names <- paste(COI, "DEG")
+
+
+## now do the dotplot loop ##
+#we need to define the cluster IDs in scATAC so we can iterate through them properly
+COI <- c('0 PF', '1 RF', '2 DP', '3 Krtno', '4 Fascia', '5 Adipo BV', '6 Pericyte', '7 Div Fibro', '8 Schwann Cell', 
+         '9 Macrophage', '10 Adipo RF', '11 BV', '12 Skeletal Muscle', '13 NK Cell')#define the cluster IDs from scATAC-seq
+path_out <- 'W:/Driskell Lab/Thompson et al. 2021/Data/P0 WT/ATAC/DEG_mech/RNA/'#path to export folder
+
+
+tic('Start DotPlot of all DEG sets by Cluster')
+
+n_dot <- 1
+while(n_dot < length(DEG_names) + 1) {
+  DEGs <- DEG_obj[[n_dot]]
+  d1 <- DotPlot(object = scATAC_WT3, features = DEGs, assay = 'RNA', 
+                cluster.idents = FALSE) + 
+    scale_colour_gradientn(colours = divergentcolors_RYB(22)) +
+    ggtitle(DEG_names[n_dot]) + 
+    coord_flip() + 
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))#color cells w/ Scanpy color scheme, add title for DEG set, use ggplot to flip x/y axes, rotate x axis labels
+  print(d1)
+  
+  #extract the datavalues of the DotPlot, since it is a ggplot object
+  raw_dotplot <- ggplot_build(d1)
+  raw_dotplot <- as.data.frame(raw_dotplot[["plot"]][["data"]])#need to make rownames unique!!!
+  
+  n_coi <- 1#initialize counter for which cluster's data you are extracting
+  while (n_coi < length(COI) + 1) {
+    coi_id <- raw_dotplot$id
+    row_matches <- grep(COI[n_coi], coi_id)#get index positions of rows for the first atac cluster ID
+    raw_dotplot_temp <- raw_dotplot[row_matches, ]#subset for the set of data corresponding to first atac cluster
+    
+    #bug fixing for cases where one element in a column has an NA -- returns NA from mean()
+    raw_dotplot_temp$avg.exp[which(is.na(raw_dotplot_temp$avg.exp))] <- 0#replace the positions in avg.exp that have NA with 0
+    raw_dotplot_temp$pct.exp[which(is.na(raw_dotplot_temp$pct.exp))] <- 0#replace the positions in the pct.exp that has NA with 0
+    raw_dotplot_temp$avg.exp.scaled[which(is.na(raw_dotplot_temp$avg.exp.scaled))] <- 0#replace the items in the pct.exp that has NA with 0
+  
+    if (n_coi == 1) {
+      raw_dotplot_summary_master <- data.frame("avg.acc" = mean(raw_dotplot_temp$avg.exp), 
+                                           "avg.pct" = mean(raw_dotplot_temp$pct.exp),
+                                           "avg.acc.scaled" = mean(raw_dotplot_temp$avg.exp.scaled))
+      raw_dotplot_summary_master$'corr.score' = raw_dotplot_summary_master$avg.acc * raw_dotplot_summary_master$avg.pct
+      raw_dotplot_summary_master$'corr.score.scaled' = raw_dotplot_summary_master$avg.acc.scaled * raw_dotplot_summary_master$avg.pct
+      rownames(raw_dotplot_summary_master) <- paste("cluster", COI[n_coi])
+    }
+    if (n_coi > 1) {
+      raw_dotplot_summary_temp <- data.frame("avg.acc" = mean(raw_dotplot_temp$avg.exp), 
+                                           "avg.pct" = mean(raw_dotplot_temp$pct.exp),
+                                           "avg.acc.scaled" = mean(raw_dotplot_temp$avg.exp.scaled))
+      raw_dotplot_summary_temp$'corr.score' = raw_dotplot_summary_temp$avg.acc * raw_dotplot_summary_temp$avg.pct
+      raw_dotplot_summary_temp$'corr.score.scaled' = raw_dotplot_summary_temp$avg.acc.scaled * raw_dotplot_summary_temp$avg.pct
+      rownames(raw_dotplot_summary_temp) <- paste("cluster", COI[n_coi])
+      
+      #merge dataframes of metrics from individual atac clusters to see the overall relationship of atac cluster to the DEGs
+      raw_dotplot_summary_master <- rbind(raw_dotplot_summary_master, raw_dotplot_summary_temp)
+      
+      write.csv(raw_dotplot_summary_master, file = paste(path_out, DEG_names[n_dot], "_DotPlot_corr_atac.csv", sep = ''))
+    }
+    
+    n_coi <- n_coi + 1
+  }
+
+  
+  #ggsave()
+  n_dot <- n_dot + 1
+}
+toc()
+```
+
+#put it together
+```{r fig.height=8, fig.width=7, message=FALSE, warning=FALSE}
+path_in <- 'W:/Driskell Lab/Thompson et al. 2021/Data/P0 WT/ATAC/DEG_mech/RNA/'#path to import folder
+rna_clusters <- c('0 PF', '1 RF', '2 PF', '3 RF', '4 DP', '5 Div Fibro', '6 Keratinocyte', '7 Pericyte',  '8 BV', 
+         '9 Leukocyte', '10 Macrophage', '11 Schwann Cell', '13 Erythrocyte', '14 Pre-adipocyte', 
+         '15 Skeletal Muscle', '16 Leukocyte', '17 BV', '18 Smooth Muscle', '19 DS', '20 Melanocyte')
+DEG_names <- paste(rna_clusters, "DEG")
+
+atac_clusters <- c('0 PF', '1 RF', '2 DP', '3 Krtno', '4 Fascia', '5 Adipo BV', '6 Pericyte', '7 Div Fibro', '8 Schwann Cell', 
+         '9 Macrophage', '10 Adipo RF', '11 BV', '12 Skeletal Muscle', '13 NK Cell')
+
+file_names <- paste(path_in, DEG_names, "_DotPlot_corr_atac.csv", sep = '')#get the dataframes of correlation values 
+
+DEG_DotPlot_corr0 <- as.data.frame(read.csv(file = file_names[1]))
+DEG_DotPlot_corr1 <- as.data.frame(read.csv(file = file_names[2]))
+DEG_DotPlot_corr2 <- as.data.frame(read.csv(file = file_names[3]))
+DEG_DotPlot_corr3 <- as.data.frame(read.csv(file = file_names[4]))
+DEG_DotPlot_corr4 <- as.data.frame(read.csv(file = file_names[5]))
+DEG_DotPlot_corr5 <- as.data.frame(read.csv(file = file_names[6]))
+DEG_DotPlot_corr6 <- as.data.frame(read.csv(file = file_names[7]))
+DEG_DotPlot_corr7 <- as.data.frame(read.csv(file = file_names[8]))
+DEG_DotPlot_corr8 <- as.data.frame(read.csv(file = file_names[9]))
+DEG_DotPlot_corr9 <- as.data.frame(read.csv(file = file_names[10]))
+DEG_DotPlot_corr10 <- as.data.frame(read.csv(file = file_names[11]))
+DEG_DotPlot_corr11 <- as.data.frame(read.csv(file = file_names[12]))
+DEG_DotPlot_corr12 <- as.data.frame(read.csv(file = file_names[13]))
+DEG_DotPlot_corr13 <- as.data.frame(read.csv(file = file_names[14]))
+DEG_DotPlot_corr14 <- as.data.frame(read.csv(file = file_names[15]))
+DEG_DotPlot_corr15 <- as.data.frame(read.csv(file = file_names[16]))
+DEG_DotPlot_corr16 <- as.data.frame(read.csv(file = file_names[17]))
+DEG_DotPlot_corr17 <- as.data.frame(read.csv(file = file_names[18]))
+DEG_DotPlot_corr18 <- as.data.frame(read.csv(file = file_names[19]))
+DEG_DotPlot_corr19 <- as.data.frame(read.csv(file = file_names[20]))
+
+#we need to extract the columns of correlation score values to form vector lists that will be rows, columns, and values (X, Y, Z) for heatmap. Need to duplicate the names of each row for each column for a total number of rows of # atac clusters x # rna DEGs
+DEG_v <- c(DEG_DotPlot_corr0$corr.score.scaled, DEG_DotPlot_corr1$corr.score.scaled,
+           DEG_DotPlot_corr2$corr.score.scaled, DEG_DotPlot_corr3$corr.score.scaled,
+           DEG_DotPlot_corr4$corr.score.scaled, DEG_DotPlot_corr5$corr.score.scaled,
+           DEG_DotPlot_corr6$corr.score.scaled, DEG_DotPlot_corr7$corr.score.scaled,
+           DEG_DotPlot_corr8$corr.score.scaled, DEG_DotPlot_corr9$corr.score.scaled,
+           DEG_DotPlot_corr10$corr.score.scaled, DEG_DotPlot_corr11$corr.score.scaled,
+           DEG_DotPlot_corr12$corr.score.scaled, DEG_DotPlot_corr13$corr.score.scaled,
+           DEG_DotPlot_corr14$corr.score.scaled, DEG_DotPlot_corr15$corr.score.scaled,
+           DEG_DotPlot_corr16$corr.score.scaled, DEG_DotPlot_corr17$corr.score.scaled,
+           DEG_DotPlot_corr18$corr.score.scaled, DEG_DotPlot_corr19$corr.score.scaled)#vector of DEG correlation values
+
+DEG_names <- c(rep(rna_clusters[1], length(atac_clusters)), rep(rna_clusters[2], length(atac_clusters)),
+               rep(rna_clusters[3], length(atac_clusters)), rep(rna_clusters[4], length(atac_clusters)),
+               rep(rna_clusters[5], length(atac_clusters)), rep(rna_clusters[6], length(atac_clusters)),
+               rep(rna_clusters[7], length(atac_clusters)), rep(rna_clusters[8], length(atac_clusters)),
+               rep(rna_clusters[9], length(atac_clusters)), rep(rna_clusters[10], length(atac_clusters)),
+               rep(rna_clusters[11], length(atac_clusters)), rep(rna_clusters[12], length(atac_clusters)),
+               rep(rna_clusters[13], length(atac_clusters)), rep(rna_clusters[14], length(atac_clusters)),
+               rep(rna_clusters[15], length(atac_clusters)), rep(rna_clusters[16], length(atac_clusters)),
+               rep(rna_clusters[17], length(atac_clusters)), rep(rna_clusters[18], length(atac_clusters)),
+               rep(rna_clusters[19], length(atac_clusters)), rep(rna_clusters[20], length(atac_clusters)))#want to repeat the DEG name = #rows in each dataframe (= # ATAC clusters)
+
+ATAC_names <- c(rep(atac_clusters, length(rna_clusters)))#names of the rows, repeat equal to the total number of DEGs each set of ATAC clusters is compared to
+
+heat_DotPlot_corr_gg <- data.frame("ATAC_Cluster" = ATAC_names, "scRNA_DEG" = DEG_names, "corr.score.scaled" = DEG_v)
+
+hmap <- ggplot(data = heat_DotPlot_corr_gg,
+               aes(x = factor(ATAC_Cluster, 
+                              levels = c('2 DP', '0 PF', '7 Div Fibro', '1 RF', '10 Adipo RF', '4 Fascia',
+                                         '6 Pericyte', '5 Adipo BV', '11 BV', '12 Skeletal Muscle', 
+                                         '3 Krtno', '8 Schwann Cell', '9 Macrophage', '13 NK Cell')), 
+                   y = factor(scRNA_DEG, 
+                              levels = c('4 DP', '19 DS', '2 PF', '0 PF', '5 Div Fibro', '1 RF', '3 RF', '14 Pre-adipocyte',
+                                         '7 Pericyte',  '8 BV', '17 BV', '15 Skeletal Muscle', '18 Smooth Muscle',
+                                         '6 Keratinocyte', '11 Schwann Cell', '20 Melanocyte',
+                                         '10 Macrophage', '9 Leukocyte','16 Leukocyte', '13 Erythrocyte')),
+                   fill = corr.score.scaled)) +
+  geom_tile() +
+  scale_fill_gradientn(colours = divergentcolors_RYB(22)) + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+          panel.background = element_rect(fill = NA),
+          plot.background = element_rect(fill = NA),
+          panel.grid.major.y = element_line(colour = NA),
+          panel.grid.major.x = element_line(colour = NA),
+          panel.grid.minor.y = element_line(colour = NA)) +
+  ggtitle("scRNA Cluster DEG Correlation to scATAC Cluster RNA Slot Accessibility") +
+  xlab(label = "scATAC Cluster") + ylab(label = "scRNA DEG")
+
+print(hmap)
+
+## Now look at just the scaled accessibility score of the RNA slot (isolate accessibility from pct.accessible)
+DEG_v <- c(DEG_DotPlot_corr0$avg.acc.scaled, DEG_DotPlot_corr1$avg.acc.scaled,
+           DEG_DotPlot_corr2$avg.acc.scaled, DEG_DotPlot_corr3$avg.acc.scaled,
+           DEG_DotPlot_corr4$avg.acc.scaled, DEG_DotPlot_corr5$avg.acc.scaled,
+           DEG_DotPlot_corr6$avg.acc.scaled, DEG_DotPlot_corr7$avg.acc.scaled,
+           DEG_DotPlot_corr8$avg.acc.scaled, DEG_DotPlot_corr9$avg.acc.scaled,
+           DEG_DotPlot_corr10$avg.acc.scaled, DEG_DotPlot_corr11$avg.acc.scaled,
+           DEG_DotPlot_corr12$avg.acc.scaled, DEG_DotPlot_corr13$avg.acc.scaled,
+           DEG_DotPlot_corr14$avg.acc.scaled, DEG_DotPlot_corr15$avg.acc.scaled,
+           DEG_DotPlot_corr16$avg.acc.scaled, DEG_DotPlot_corr17$avg.acc.scaled,
+           DEG_DotPlot_corr18$avg.acc.scaled, DEG_DotPlot_corr19$avg.acc.scaled)#vector of DEG correlation values
+
+DEG_names <- c(rep(rna_clusters[1], length(atac_clusters)), rep(rna_clusters[2], length(atac_clusters)),
+               rep(rna_clusters[3], length(atac_clusters)), rep(rna_clusters[4], length(atac_clusters)),
+               rep(rna_clusters[5], length(atac_clusters)), rep(rna_clusters[6], length(atac_clusters)),
+               rep(rna_clusters[7], length(atac_clusters)), rep(rna_clusters[8], length(atac_clusters)),
+               rep(rna_clusters[9], length(atac_clusters)), rep(rna_clusters[10], length(atac_clusters)),
+               rep(rna_clusters[11], length(atac_clusters)), rep(rna_clusters[12], length(atac_clusters)),
+               rep(rna_clusters[13], length(atac_clusters)), rep(rna_clusters[14], length(atac_clusters)),
+               rep(rna_clusters[15], length(atac_clusters)), rep(rna_clusters[16], length(atac_clusters)),
+               rep(rna_clusters[17], length(atac_clusters)), rep(rna_clusters[18], length(atac_clusters)),
+               rep(rna_clusters[19], length(atac_clusters)), rep(rna_clusters[20], length(atac_clusters)))#want to repeat the DEG name = #rows in each dataframe (= # ATAC clusters)
+
+ATAC_names <- c(rep(atac_clusters, length(rna_clusters)))#names of the rows, repeat equal to the total number of DEGs each set of ATAC clusters is compared to
+
+heat_DotPlot_corr_gg2 <- data.frame("ATAC_Cluster" = ATAC_names, "scRNA_DEG" = DEG_names, "avg.acc.scaled" = DEG_v)
+
+hmap2 <- ggplot(data = heat_DotPlot_corr_gg2,
+               aes(x = factor(ATAC_Cluster, 
+                              levels = c('2 DP', '0 PF', '7 Div Fibro', '1 RF', '10 Adipo RF', '4 Fascia',
+                                         '6 Pericyte', '5 Adipo BV', '11 BV', '12 Skeletal Muscle', 
+                                         '3 Krtno', '8 Schwann Cell', '9 Macrophage', '13 NK Cell')), 
+                   y = factor(scRNA_DEG, 
+                              levels = c('4 DP', '19 DS', '2 PF', '0 PF', '5 Div Fibro', '1 RF', '3 RF', '14 Pre-adipocyte',
+                                         '7 Pericyte',  '8 BV', '17 BV', '15 Skeletal Muscle', '18 Smooth Muscle',
+                                         '6 Keratinocyte', '11 Schwann Cell', '20 Melanocyte',
+                                         '10 Macrophage', '9 Leukocyte','16 Leukocyte', '13 Erythrocyte')),
+                   fill = avg.acc.scaled)) +
+  geom_tile() +
+  scale_fill_gradient2(low = "#313695", mid = "#f7f7f7", high = "#a50026") + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+          panel.background = element_rect(fill = NA),
+          plot.background = element_rect(fill = NA),
+          panel.grid.major.y = element_line(colour = NA),
+          panel.grid.major.x = element_line(colour = NA),
+          panel.grid.minor.y = element_line(colour = NA)) +
+  ggtitle("scRNA Cluster DEG Correlation to scATAC Cluster RNA Slot Accessibility") +
+  xlab(label = "scATAC Cluster") + ylab(label = "scRNA DEG")
+
+print(hmap2)
+```
+
+
+
+
+
+
+
+
+# Get a list object of the top scRNA clusters' DEGs (FIBRO SUBSET)
+```{r}
+path_in <- 'W:/Driskell Lab/Thompson et al. 2021/Data/P0 WT/RNA/Fibroblasts/DEG/'
+COI <- c('0 Crabp1 PF', '1 RF', '2 PF', '3 DP', '4 Dkk2 PF', '5 Div Fibro', 
+                         '6 Adipo RF', '7 Fascia RF', '8 Div Fibro', '9 APM')#define the cluster IDs from scRNA
+
+promoter_genes <- scATAC_sub2@assays$Promoter@data@Dimnames[[1]]
+
+c0_markers <- read.csv(file = paste(path_in, COI[1], '_pos_markers.csv', sep = ''))
+c0_markers <- c0_markers[c0_markers$dPct1.dFold > quantile(c0_markers$dPct1.dFold, 0.95), ]#filter rows to top 5% of DEGs
+c0_markers <- c0_markers[c0_markers$pct.1 >= 0.1, ]#filter out DEGs only expressed in <10% of the cluster, since these are less likely to be relevant
+c0_markers <- c0_markers[(c0_markers$Gene %in% promoter_genes), ]#keep rows of genes found in both datasets
+#write.csv(c0_markers, file = paste(path_in, COI[1], '_pos_markers_READY2Int.csv', sep = ''))
+
+c1_markers <- read.csv(file = paste(path_in, COI[2], '_pos_markers.csv', sep = ''))
+c1_markers <- c1_markers[c1_markers$dPct1.dFold > quantile(c1_markers$dPct1.dFold, 0.95), ]#filter rows to top 5% of DEGs
+c1_markers <- c1_markers[c1_markers$pct.1 >= 0.1, ]#filter out DEGs only expressed in <10% of the cluster, since these are less likely to be relevant
+c1_markers <- c1_markers[(c1_markers$Gene %in% promoter_genes), ]#keep rows of genes found in both datasets
+#write.csv(c1_markers, file = paste(path_in, COI[2], '_pos_markers_READY2Int.csv', sep = ''))
+
+c2_markers <- read.csv(file = paste(path_in, COI[3], '_pos_markers.csv', sep = ''))
+c2_markers <- c2_markers[c2_markers$dPct1.dFold > quantile(c2_markers$dPct1.dFold, 0.95), ]#filter rows to top 5% of DEGs
+c2_markers <- c2_markers[c2_markers$pct.1 >= 0.1, ]#filter out DEGs only expressed in <10% of the cluster, since these are less likely to be relevant
+c2_markers <- c2_markers[(c2_markers$Gene %in% promoter_genes), ]#keep rows of genes found in both datasets
+#write.csv(c2_markers, file = paste(path_in, COI[3], '_pos_markers_READY2Int.csv', sep = ''))
+
+c3_markers <- read.csv(file = paste(path_in, COI[4], '_pos_markers.csv', sep = ''))
+c3_markers <- c3_markers[c3_markers$dPct1.dFold > quantile(c3_markers$dPct1.dFold, 0.95), ]#filter rows to top 5% of DEGs
+c3_markers <- c3_markers[c3_markers$pct.1 >= 0.1, ]#filter out DEGs only expressed in <10% of the cluster, since these are less likely to be relevant
+c3_markers <- c3_markers[(c3_markers$Gene %in% promoter_genes), ]#keep rows of genes found in both datasets
+#write.csv(c3_markers, file = paste(path_in, COI[4], '_pos_markers_READY2Int.csv', sep = ''))
+
+c4_markers <- read.csv(file = paste(path_in, COI[5], '_pos_markers.csv', sep = ''))
+c4_markers <- c4_markers[c4_markers$dPct1.dFold > quantile(c4_markers$dPct1.dFold, 0.95), ]#filter rows to top 5% of DEGs
+c4_markers <- c4_markers[c4_markers$pct.1 >= 0.1, ]#filter out DEGs only expressed in <10% of the cluster, since these are less likely to be relevant
+c4_markers <- c4_markers[(c4_markers$Gene %in% promoter_genes), ]#keep rows of genes found in both datasets
+#write.csv(c4_markers, file = paste(path_in, COI[5], '_pos_markers_READY2Int.csv', sep = ''))
+
+c5_markers <- read.csv(file = paste(path_in, COI[6], '_pos_markers.csv', sep = ''))
+c5_markers <- c5_markers[c5_markers$dPct1.dFold > quantile(c5_markers$dPct1.dFold, 0.95), ]#filter rows to top 5% of DEGs
+c5_markers <- c5_markers[c5_markers$pct.1 >= 0.1, ]#filter out DEGs only expressed in <10% of the cluster, since these are less likely to be relevant
+c5_markers <- c5_markers[(c5_markers$Gene %in% promoter_genes), ]#keep rows of genes found in both datasets
+#write.csv(c5_markers, file = paste(path_in, COI[6], '_pos_markers_READY2Int.csv', sep = ''))
+
+c6_markers <- read.csv(file = paste(path_in, COI[7], '_pos_markers.csv', sep = ''))
+c6_markers <- c6_markers[c6_markers$dPct1.dFold > quantile(c6_markers$dPct1.dFold, 0.95), ]#filter rows to top 5% of DEGs
+c6_markers <- c6_markers[c6_markers$pct.1 >= 0.1, ]#filter out DEGs only expressed in <10% of the cluster, since these are less likely to be relevant
+c6_markers <- c6_markers[(c6_markers$Gene %in% promoter_genes), ]#keep rows of genes found in both datasets
+#write.csv(c6_markers, file = paste(path_in, COI[7], '_pos_markers_READY2Int.csv', sep = ''))
+
+c7_markers <- read.csv(file = paste(path_in, COI[8], '_pos_markers.csv', sep = ''))
+c7_markers <- c7_markers[c7_markers$dPct1.dFold > quantile(c7_markers$dPct1.dFold, 0.95), ]#filter rows to top 5% of DEGs
+c7_markers <- c7_markers[c7_markers$pct.1 >= 0.1, ]#filter out DEGs only expressed in <10% of the cluster, since these are less likely to be relevant
+c7_markers <- c7_markers[(c7_markers$Gene %in% promoter_genes), ]#keep rows of genes found in both datasets
+#write.csv(c7_markers, file = paste(path_in, COI[8], '_pos_markers_READY2Int.csv', sep = ''))
+
+c8_markers <- read.csv(file = paste(path_in, COI[9], '_pos_markers.csv', sep = ''))
+c8_markers <- c8_markers[c8_markers$dPct1.dFold > quantile(c8_markers$dPct1.dFold, 0.95), ]#filter rows to top 5% of DEGs
+c8_markers <- c8_markers[c8_markers$pct.1 >= 0.1, ]#filter out DEGs only expressed in <10% of the cluster, since these are less likely to be relevant
+c8_markers <- c8_markers[(c8_markers$Gene %in% promoter_genes), ]#keep rows of genes found in both datasets
+#write.csv(c8_markers, file = paste(path_in, COI[9], '_pos_markers_READY2Int.csv', sep = ''))
+
+c9_markers <- read.csv(file = paste(path_in, COI[10], '_pos_markers.csv', sep = ''))
+c9_markers <- c9_markers[c9_markers$dPct1.dFold > quantile(c9_markers$dPct1.dFold, 0.95), ]#filter rows to top 5% of DEGs
+c9_markers <- c9_markers[c9_markers$pct.1 >= 0.1, ]#filter out DEGs only expressed in <10% of the cluster, since these are less likely to be relevant
+c9_markers <- c9_markers[(c9_markers$Gene %in% promoter_genes), ]#keep rows of genes found in both datasets
+#write.csv(c9_markers, file = paste(path_in, COI[10], '_pos_markers_READY2Int.csv', sep = ''))
+
+
+## extract the column of DEG names from the given cluster ##
+c0_DEG <- c0_markers$Gene
+c1_DEG <- c1_markers$Gene
+c2_DEG <- c2_markers$Gene
+c3_DEG <- c3_markers$Gene
+c4_DEG <- c4_markers$Gene
+c5_DEG <- c5_markers$Gene
+c6_DEG <- c6_markers$Gene
+c7_DEG <- c7_markers$Gene
+c8_DEG <- c8_markers$Gene
+c9_DEG <- c9_markers$Gene
+
+DEG_obj <- list(c0_DEG, c1_DEG, c2_DEG, c3_DEG, c4_DEG, c5_DEG, c6_DEG, c7_DEG, c8_DEG, c9_DEG)#create a list object of the DEG vectors
+RNA_fibros <- c('0 Crabp1 PF', '1 RF', '2 PF', '3 DP', '4 Dkk2 PF', '5 Div Fibro', 
+                         '6 Adipo RF', '7 Fascia RF', '8 Div Fibro', '9 APM')#cluster names from the fibroblast subset scRNA
+DEG_names <- paste(RNA_fibros, "DEG")
+```
+
+# Get accessibility scores for the DEGs by scATAC cluster
+```{r fig.height=42, fig.width=6, message=FALSE, warning=FALSE}
+#we need to define the cluster IDs in scATAC so we can iterate through them properly
+COI <- c('0 RF', '1 PF', '2 PF', '3 PF', '4 RF', '5 DP', 
+                         '6 PF', '7 Fascia RF', '8 Adipo RF')#define the cluster IDs from scATAC-seq
+#path_out <- 'W:/Driskell Lab/Thompson et al. 2021/Data/P0 WT/ATAC/Fibroblasts/DEG_mech/RNA/'#path to export folder
+
+
+tic('Start DotPlot of all DEG sets by Cluster')
+
+n_dot <- 1
+while(n_dot < length(DEG_names) + 1) {
+  DEGs <- DEG_obj[[n_dot]]
+  d1 <- DotPlot(object = scATAC_sub2, features = DEGs, assay = 'RNA', 
+                cluster.idents = FALSE) + 
+    scale_colour_gradientn(colours = divergentcolors_RYB(22)) +
+    ggtitle(DEG_names[n_dot]) + 
+    coord_flip() + 
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))#color cells w/ Scanpy color scheme, add title for DEG set, use ggplot to flip x/y axes, rotate x axis labels
+  print(d1)
+  
+  #extract the datavalues of the DotPlot, since it is a ggplot object
+  raw_dotplot <- ggplot_build(d1)
+  raw_dotplot <- as.data.frame(raw_dotplot[["plot"]][["data"]])#need to make rownames unique!!!
+  
+  n_coi <- 1#initialize counter for which cluster's data you are extracting
+  while (n_coi < length(COI) + 1) {
+    coi_id <- raw_dotplot$id
+    row_matches <- grep(COI[n_coi], coi_id)#get index positions of rows for the first atac cluster ID
+    raw_dotplot_temp <- raw_dotplot[row_matches, ]#subset for the set of data corresponding to first atac cluster
+    
+    #bug fixing for cases where one element in a column has an NA -- returns NA from mean()
+    raw_dotplot_temp$avg.exp[which(is.na(raw_dotplot_temp$avg.exp))] <- 0#replace the positions in avg.exp that have NA with 0
+    raw_dotplot_temp$pct.exp[which(is.na(raw_dotplot_temp$pct.exp))] <- 0#replace the positions in the pct.exp that has NA with 0
+    raw_dotplot_temp$avg.exp.scaled[which(is.na(raw_dotplot_temp$avg.exp.scaled))] <- 0#replace the items in the pct.exp that has NA with 0
+  
+    if (n_coi == 1) {
+      raw_dotplot_summary_master <- data.frame("avg.acc" = mean(raw_dotplot_temp$avg.exp), 
+                                           "avg.pct" = mean(raw_dotplot_temp$pct.exp),
+                                           "avg.acc.scaled" = mean(raw_dotplot_temp$avg.exp.scaled))
+      raw_dotplot_summary_master$'corr.score' = raw_dotplot_summary_master$avg.acc * raw_dotplot_summary_master$avg.pct
+      raw_dotplot_summary_master$'corr.score.scaled' = raw_dotplot_summary_master$avg.acc.scaled * raw_dotplot_summary_master$avg.pct
+      rownames(raw_dotplot_summary_master) <- paste("cluster", COI[n_coi])
+    }
+    if (n_coi > 1) {
+      raw_dotplot_summary_temp <- data.frame("avg.acc" = mean(raw_dotplot_temp$avg.exp), 
+                                           "avg.pct" = mean(raw_dotplot_temp$pct.exp),
+                                           "avg.acc.scaled" = mean(raw_dotplot_temp$avg.exp.scaled))
+      raw_dotplot_summary_temp$'corr.score' = raw_dotplot_summary_temp$avg.acc * raw_dotplot_summary_temp$avg.pct
+      raw_dotplot_summary_temp$'corr.score.scaled' = raw_dotplot_summary_temp$avg.acc.scaled * raw_dotplot_summary_temp$avg.pct
+      rownames(raw_dotplot_summary_temp) <- paste("cluster", COI[n_coi])
+      
+      #merge dataframes of metrics from individual atac clusters to see the overall relationship of atac cluster to the DEGs
+      raw_dotplot_summary_master <- rbind(raw_dotplot_summary_master, raw_dotplot_summary_temp)
+      
+      write.csv(raw_dotplot_summary_master, file = paste(path_out, DEG_names[n_dot], "_DotPlot_corr_atac.csv", sep = ''))
+    }
+    
+    n_coi <- n_coi + 1
+  }
+
+  
+  #ggsave()
+  n_dot <- n_dot + 1
+}
+toc()
+```
+
+## View correlation of all ATAC clusters to all scRNA DEGs using a heatmap (combines the above section into one)
+```{r message=FALSE, warning=FALSE}
+path_in <- 'W:/Driskell Lab/Thompson et al. 2021/Data/P0 WT/ATAC/Fibroblasts/DEG_mech/RNA/'#path to import folder
+RNA_fibros <- c('0 Crabp1 PF', '1 RF', '2 PF', '3 DP', '4 Dkk2 PF', '5 Div Fibro', 
+                         '6 Adipo RF', '7 Fascia RF', '8 Div Fibro', '9 APM')#cluster names from the fibroblast subset scRNA
+DEG_names <- paste(RNA_fibros, "DEG")
+atac_clusters <- c("0 RF", "1 PF", "2 PF", "3 PF", "4 RF", "5 DP", "6 PF", "7 Fascia RF", "8 Adipo RF")
+
+file_names <- paste(path_in, DEG_names, "_DotPlot_corr_atac.csv", sep = '')
+
+DEG_DotPlot_corr0 <- as.data.frame(read.csv(file = file_names[1]))
+DEG_DotPlot_corr1 <- as.data.frame(read.csv(file = file_names[2]))
+DEG_DotPlot_corr2 <- as.data.frame(read.csv(file = file_names[3]))
+DEG_DotPlot_corr3 <- as.data.frame(read.csv(file = file_names[4]))
+DEG_DotPlot_corr4 <- as.data.frame(read.csv(file = file_names[5]))
+DEG_DotPlot_corr5 <- as.data.frame(read.csv(file = file_names[6]))
+DEG_DotPlot_corr6 <- as.data.frame(read.csv(file = file_names[7]))
+DEG_DotPlot_corr7 <- as.data.frame(read.csv(file = file_names[8]))
+DEG_DotPlot_corr8 <- as.data.frame(read.csv(file = file_names[9]))
+DEG_DotPlot_corr9 <- as.data.frame(read.csv(file = file_names[10]))
+
+#we need to extract the columns of correlation score values to form vector lists that will be rows, columns, and values (X, Y, Z) for heatmap. Need to duplicate the names of each row for each column for a total number of rows of # atac clusters x # rna DEGs
+DEG_v <- c(DEG_DotPlot_corr0$corr.score.scaled, DEG_DotPlot_corr1$corr.score.scaled,
+           DEG_DotPlot_corr2$corr.score.scaled, DEG_DotPlot_corr3$corr.score.scaled,
+           DEG_DotPlot_corr4$corr.score.scaled, DEG_DotPlot_corr5$corr.score.scaled,
+           DEG_DotPlot_corr6$corr.score.scaled, DEG_DotPlot_corr7$corr.score.scaled,
+           DEG_DotPlot_corr8$corr.score.scaled, DEG_DotPlot_corr9$corr.score.scaled)#vector of DEG correlation values
+
+DEG_names <- c(rep(RNA_fibros[1], length(atac_clusters)), rep(RNA_fibros[2], length(atac_clusters)),
+               rep(RNA_fibros[3], length(atac_clusters)), rep(RNA_fibros[4], length(atac_clusters)),
+               rep(RNA_fibros[5], length(atac_clusters)), rep(RNA_fibros[6], length(atac_clusters)),
+               rep(RNA_fibros[7], length(atac_clusters)), rep(RNA_fibros[8], length(atac_clusters)),
+               rep(RNA_fibros[9], length(atac_clusters)), rep(RNA_fibros[10], length(atac_clusters)))#want to repeat the DEG name = #rows in each dataframe (= # ATAC clusters)
+
+ATAC_names <- c(rep(atac_clusters, length(RNA_fibros)))#names of the rows, repeat equal to the total number of DEGs each set of ATAC clusters is compared to
+
+heat_DotPlot_corr_gg <- data.frame("ATAC_Cluster" = ATAC_names, "scRNA_DEG" = DEG_names, "corr.score.scaled" = DEG_v)
+
+hmap <- ggplot(data = heat_DotPlot_corr_gg,
+               aes(x = factor(ATAC_Cluster, 
+                              levels = c("5 DP", "3 PF", "1 PF", "6 PF", "2 PF", "0 RF", "4 RF", "8 Adipo RF", "7 Fascia RF")), 
+                   y = factor(scRNA_DEG, 
+                              levels = c('3 DP', '4 Dkk2 PF', '0 Crabp1 PF', '2 PF', '8 Div Fibro', 
+                                         '5 Div Fibro', '1 RF', '6 Adipo RF', '7 Fascia RF', '9 APM')),
+                   fill = corr.score.scaled)) +
+  geom_tile() +
+  scale_fill_gradientn(colours = divergentcolors_RYB(22)) + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+          panel.background = element_rect(fill = NA),
+          plot.background = element_rect(fill = NA),
+          panel.grid.major.y = element_line(colour = NA),
+          panel.grid.major.x = element_line(colour = NA),
+          panel.grid.minor.y = element_line(colour = NA)) +
+  ggtitle("scRNA Cluster DEG Correlation to scATAC Cluster RNA Slot Accessibility") +
+  xlab(label = "scATAC Cluster") + ylab(label = "scRNA DEG")
+
+print(hmap)
+
+## Now look at just the scaled accessibility score of the RNA slot (isolate accessibility from pct.accessible)
+DEG_v <- c(DEG_DotPlot_corr0$avg.acc.scaled, DEG_DotPlot_corr1$avg.acc.scaled,
+           DEG_DotPlot_corr2$avg.acc.scaled, DEG_DotPlot_corr3$avg.acc.scaled,
+           DEG_DotPlot_corr4$avg.acc.scaled, DEG_DotPlot_corr5$avg.acc.scaled,
+           DEG_DotPlot_corr6$avg.acc.scaled, DEG_DotPlot_corr7$avg.acc.scaled,
+           DEG_DotPlot_corr8$avg.acc.scaled, DEG_DotPlot_corr9$avg.acc.scaled)#vector of DEG correlation values
+
+DEG_names <- c(rep(RNA_fibros[1], length(atac_clusters)), rep(RNA_fibros[2], length(atac_clusters)),
+               rep(RNA_fibros[3], length(atac_clusters)), rep(RNA_fibros[4], length(atac_clusters)),
+               rep(RNA_fibros[5], length(atac_clusters)), rep(RNA_fibros[6], length(atac_clusters)),
+               rep(RNA_fibros[7], length(atac_clusters)), rep(RNA_fibros[8], length(atac_clusters)),
+               rep(RNA_fibros[9], length(atac_clusters)), rep(RNA_fibros[10], length(atac_clusters)))#want to repeat the DEG name = #rows in each dataframe (= # ATAC clusters)
+
+ATAC_names <- c(rep(atac_clusters, length(RNA_fibros)))#names of the rows, repeat equal to the total number of DEGs each set of ATAC clusters is compared to
+
+heat_DotPlot_corr_gg2 <- data.frame("ATAC_Cluster" = ATAC_names, "scRNA_DEG" = DEG_names, "avg.acc.scaled" = DEG_v)
+
+hmap2 <- ggplot(data = heat_DotPlot_corr_gg2,
+               aes(x = factor(ATAC_Cluster, 
+                              levels = c("5 DP", "3 PF", "1 PF", "6 PF", "2 PF", "0 RF", "4 RF", "8 Adipo RF", "7 Fascia RF")), 
+                   y = factor(scRNA_DEG, 
+                              levels = c('3 DP', '4 Dkk2 PF', '0 Crabp1 PF', '2 PF', '8 Div Fibro', 
+                                         '5 Div Fibro', '1 RF', '6 Adipo RF', '7 Fascia RF', '9 APM')),
+                   fill = avg.acc.scaled)) +
+  geom_tile() +
+  scale_fill_gradient2(low = "#313695", mid = "#f7f7f7", high = "#a50026") + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+          panel.background = element_rect(fill = NA),
+          plot.background = element_rect(fill = NA),
+          panel.grid.major.y = element_line(colour = NA),
+          panel.grid.major.x = element_line(colour = NA),
+          panel.grid.minor.y = element_line(colour = NA)) +
+  ggtitle("scRNA Cluster DEG Correlation to scATAC Cluster RNA Slot Accessibility") +
+  xlab(label = "scATAC Cluster") + ylab(label = "scRNA DEG")
+
+print(hmap2)
+```
+
+

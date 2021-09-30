@@ -1,0 +1,777 @@
+---
+title: "P0 WT scATAC-seq"
+output: html_notebook
+---
+
+# **0. Load Packages**
+### scRNA-seq Analysis Packages
+```{r, warning=FALSE, message=FALSE}
+library(hdf5r)#read in .h5 cell ranger files
+library(Seurat)#had to install.packages('spatstat') as a Seurat dependency
+library(ggplot2)
+library(sctransform)
+library(reticulate)
+#reticulate::py_install(packages ='umap-learn')# to install conda/umap-learn
+#install "BiocManager" in R
+library(limma)#for FindMarkers() function; install using BiocManager
+library(RColorBrewer)#for custom color palettes
+set.seed(1234)
+library(dplyr)#intersect() / anti_join() needed for GAP/GEPs
+```
+### scATAC-seq Analysis Packages
+```{r, warning=FALSE, message=FALSE}
+library(readr)
+library(Signac)#had to install 'AnnotationFilter', 'Biostrings', 'Rsamtools', 'biovizBase', 'ggbio' as a Signac dependency using BiocManager; 
+library(GenomeInfoDb)#install using BiocManager
+library(viridisLite)#install using BiocManager
+#library(EnsDb.Hsapiens.v75)#for human data
+library(EnsDb.Mmusculus.v79)#load the mm10 genomic data; install using BiocManager
+library(BSgenome)#install using BiocManager
+library(BSgenome.Mmusculus.UCSC.mm10)#install using BiocManager
+library(patchwork)
+library(GenomicRanges)#install using BiocManager
+library(SummarizedExperiment)#install using BiocManager
+#library(dplyr)
+library(multtest)#install using BiocManager
+library(metap)#install using BiocManager
+library(stringr)
+library(future)#ESSENTIAL for speed
+library(tictoc)#useful to time long steps
+library(tidyr)#needed to coerce DEG correlation divplots to a datastructure compatible with ggplot and geom_tile for heatmap
+plan('multisession', workers = 12)#set cores to use = 12
+options(future.globals.maxSize = 64000 * 1024^2)#set max RAM usage
+
+divergentcolors_RYB <- colorRampPalette(rev(brewer.pal(11, "RdYlBu")))#take our 3-color gradient (-, 0, +) and make a gradient of colors 
+```
+
+# **2a. Load the scATAC-seq Data & Create the Initial Seurat Object**
+## Load the CellRanger outputs & initialize the Seurat object
+I merge the peak coordinates from the P0 WT scATAC-seq data featured in this publication with the peak coordinates of an unpublished other scATAC-seq dataset that will be featured in an upcoming publication.
+Note: in order to enable effective merging and integration of multiple scATAC-seq datasets, you must first create a merged, COMMON PEAK SET from each sample's fragments.tsv file, otherwise when you find nearest neighbor and do the UMAP clustering, the cells will cluster by sample since there are non-identical fragment coordinates! E.g. Chr1-110-150 and Chr1-111-150 would be two different peak coordinates even though they refer to the same genomic region, and would therefore drive clustering of the cells from each dataset towards other cells of the same dataset as opposed to ones with similar chromatin accessibility profiles! The merging of the peak coordinates does not alter the read values in any way, it simply enables integration of this dataset with another dataset in my upcoming publication. The unpublished_peaks.bed file is available in the GEO repository for this manuscript.
+```{r, warning=FALSE, message=FALSE}
+path_wt_atac <- 'W:/Driskell Lab/Single Cell Analysis/Raw Data/P0/scATAC/WT/'#define the path to the first sample's atac data
+path_unpublished_atac <- 'W:/Driskell Lab/Single Cell Analysis/Raw Data/Unpublished/'#define the path to the second sample's atac data
+
+## Create the Common Peak Set ##
+peaks.WT <- read.table(
+  file = paste(path_wt_atac, "filtered_peak_bc_matrix/peaks.bed", sep=''),
+  col.names = c("chr", "start", "end"))#read in the peak coordinates of the WT peaks.bed file
+peaks.unpublished <- read.table(
+  file = paste(path_unpublished_atac, "filtered_peak_bc_matrix/unpublished_peaks.bed", sep=''),
+  col.names = c("chr", "start", "end"))#read in the peak coordinates of the unpublished peaks.bed file
+
+#convert to GRanges object
+gr.WT <- makeGRangesFromDataFrame(peaks.WT)
+gr.unpublished <- makeGRangesFromDataFrame(peaks.unpublished)
+combined.peaks <- reduce(x = c(gr.WT, gr.unpublished))#reduce() will overlap the peak regions from the 2 datasets; alt. is disjoin() which creates multiple smaller peaks from overlaps
+#filter out bad peaks based on length
+peakwidths <- width(combined.peaks)
+combined.peaks <- combined.peaks[peakwidths  < 10000 & peakwidths > 20]#default is < 10000 & > 20
+head(combined.peaks, n=5)#view combined peak coordinates GRanges object
+
+## Create Fragment object ##
+md.WT <- read.table(
+  file = paste(path_wt_atac, 'singlecell.csv', sep=''),
+  stringsAsFactors = FALSE,
+  sep = ",",
+  header = TRUE,
+  row.names = 1
+)[-1, ]#remove the first row (the header) from the metadata file
+
+#filter low quality cells with very low quantities of peak fragments (empty GEMs)
+md.WT <- md.WT[md.WT$passed_filters > 500, ]#filter out cells that have very low peak count
+#NOTE: if you skip this, there are cells in the fragment object that are not in the fragments.tsv file
+
+# the create fragment object
+frags.wt <- CreateFragmentObject(
+  path = paste(path_wt_atac, 'fragments.tsv.gz', sep=''),
+  cells = rownames(md.WT))#only calls rows from fragments file that pass peak quantity check
+
+
+## Quantify peaks in each dataset --> matrix of peaks x cell for each sample, with consistent peak coords ##
+WT.counts <- FeatureMatrix(
+  fragments = frags.wt,
+  features = combined.peaks,
+  cells = rownames(md.WT))
+
+## Create Seurat object ##
+atac_WT_assay <- CreateChromatinAssay(WT.counts, fragments = frags.wt)
+scATAC_WT_4int <- CreateSeuratObject(atac_WT_assay, assay = "peaks", project = 'WT ATAC', meta.data = md.WT)#project = 'orig.ident' for group.by argument!
+
+#view the Seurat object
+scATAC_WT_4int
+
+
+## Prepare gene annotations for the Seurat object (universal object) ##
+annotations <- GetGRangesFromEnsDb(ensdb = EnsDb.Mmusculus.v79)
+seqlevelsStyle(annotations) <- 'UCSC'
+genome(annotations) <- 'mm10'
+
+#add gene annotations to each Seurat object (important to enable FeaturePlot() w/ 'RNA' or 'Promoter' slots)
+Annotation(scATAC_WT_4int) <- annotations
+
+```
+## Compute QC Metrics and Filter the Initial Seurat Objects
+```{r, warning=FALSE, message=FALSE}
+## WT ##
+tic("QC calculations")
+scATAC_WT_4int <- NucleosomeSignal(object = scATAC_WT_4int)#computes ratio of fragments, mononucleosome:nucleosome free
+scATAC_WT_4int <- TSSEnrichment(object = scATAC_WT_4int, fast = FALSE, assay='peaks')#compute ratio of peaks @ TSS & nearby
+scATAC_WT_4int$pct_reads_in_peaks <- scATAC_WT_4int$peak_region_fragments / scATAC_WT_4int$passed_filters * 100
+scATAC_WT_4int$blacklist_ratio <- scATAC_WT_4int$blacklist_region_fragments / scATAC_WT_4int$peak_region_fragments
+scATAC_WT_4int$high.tss <- ifelse(scATAC_WT_4int$TSS.enrichment > 2, 'High', 'Low')#default is 2
+
+TSSPlot(scATAC_WT_4int, group.by = 'high.tss') + NoLegend()#plots TSS enrichment by distance from TSS in bp
+
+#view fragment length periodicity for all cells, group cells by high nucleosome signal #
+scATAC_WT_4int$nucleosome_group <- ifelse(scATAC_WT_4int$nucleosome_signal > 4, 'NS > 4', 'NS < 4')
+
+#FragmentHistogram(object = scATAC_WT_4int, group.by = 'nucleosome_group', region = 'chr1-100000-2100000')#plots a histogram of the nucleosome signal (ratio); default is region chr1-1-2000000, but this errors often
+
+VlnPlot(
+  object = scATAC_WT_4int,
+  features = c('pct_reads_in_peaks', 'peak_region_fragments', 'TSS.enrichment', 'blacklist_ratio', 'nucleosome_signal'),
+  pt.size = 0.2, ncol = 5)
+
+VlnPlot(
+  object = scATAC_WT_4int,
+  features = c('pct_reads_in_peaks', 'passed_filters'),
+  pt.size = 0.2, ncol = 5)
+
+toc()
+```
+### Identify passed_filters cutoff for doublets
+Use quantile to get a sense for the distribution of cells' passed_filters values. The onset of outliers will be obvious by a massive uptick in values over a small increase in percentile.
+```{r fig.height=3, fig.width=12, message=FALSE, warning=FALSE}
+quantile(scATAC_WT_4int$passed_filters, c(0, .25, .5, .75, .80, .85, .9, .91, .92, .93, .94, .95, .99, 1))
+```
+
+### subset each Seurat Object by QC metrics --> QC filtration ##
+``` {r}
+scATAC_WT_4int_sub <- subset(
+  x = scATAC_WT_4int,
+  subset = peak_region_fragments > 3000 &
+    peak_region_fragments < 30000 &
+    pct_reads_in_peaks > 25 &
+    blacklist_ratio < 0.1 &
+    nucleosome_signal < 4 &
+    TSS.enrichment > 2 &
+    passed_filters < 50000)#Seurat default is <20k peak region fragments
+
+#look at how the distribution of the data around each QC metric changes as a result of this subsetting
+VlnPlot(
+  object = scATAC_WT_4int_sub,
+  features = c('pct_reads_in_peaks', 'peak_region_fragments', 'TSS.enrichment', 'blacklist_ratio', 'passed_filters'),
+  pt.size = 0.2, ncol = 5)
+
+scATAC_WT_4int
+scATAC_WT_4int_sub
+```
+Optional: save the initial filtered Seurat object
+```{r}
+save(scATAC_WT_4int_sub, file = 'W:/Driskell Lab/Thompson et al. 2021/Data/P0 WT/ATAC/Object/scATAC_WT_preGAM.RData')
+```
+
+
+## Compute Gene Activity Matrices
+First, we need to generate the global constants used to approximate a gene ('expression') by cell matrix. It should be noted that the code used below was first generated in beta Signac (pre 1.0.0), so the syntax for Signac's default method may be outdated compared to the most recent Signac vignettes.
+
+### 'RNA' Slot
+Signac default, uses the entire gene body plus 2500 bp upstream of TSS coordinate to generate a gene by cell matrix of peak reads approximating gene expression.
+```{r warning=FALSE}
+tic("'RNA' Slot (Signac default)")#time how long the default gene activity matrix calculation takes
+#create granges object with gene start to end coordinates
+gene.ranges <- genes(EnsDb.Mmusculus.v79)
+seqlevelsStyle(gene.ranges) <- 'UCSC'
+gene.ranges <- gene.ranges[gene.ranges$gene_biotype == 'protein_coding', ]
+gene.ranges <- keepStandardChromosomes(gene.ranges, pruning.mode = 'coarse')
+
+# extend coordinates upstream to include the promoter (Signac default)
+genebodyandpromoter.coords <- Extend(x = gene.ranges, upstream = 2000, downstream = 0)#Signac default
+
+gene.activities.wt <- FeatureMatrix(
+  fragments = frags.wt,
+  features = genebodyandpromoter.coords,
+  cells = colnames(scATAC_WT_4int_sub))#in order to generate a Gene Activity Matrix based solely on the PROMOTER + GENE BODY region (Seurat/Signac default)
+
+# convert rownames from chromosomal coordinates into gene names from Gene Body and Promoter (Signac default)
+gene.key <- genebodyandpromoter.coords$gene_name
+names(gene.key) <- GRangesToString(grange = genebodyandpromoter.coords)
+
+rownames(gene.activities.wt) <- make.unique(gene.key[rownames(gene.activities.wt)])# make.unique(...) added to gene.key(...) by Quan
+gene.activities.wt <- gene.activities.wt[rownames(gene.activities.wt)!="",]#IMPORTANT: removes empty entries, avoid ERROR (credit to Quan for the fix)
+
+# add the gene activity matrices to the Seurat object as a new assay, and normalize it (store each activity matrix method in a diff. slot)
+scATAC_WT_4int_sub[['RNA']] <- CreateAssayObject(counts = gene.activities.wt)
+scATAC_WT_4int_sub <- NormalizeData(
+  object = scATAC_WT_4int_sub,
+  assay = 'RNA',
+  normalization.method = 'LogNormalize',
+  scale.factor = median(scATAC_WT_4int_sub$nCount_RNA))#use median RNA approx. counts to ~ gene expression levels (scATAC-seq ~ scRNA-seq)
+
+toc()
+```
+
+
+### Solo Analysis
+The above chunks enable one to potentially go straight to merging, then RunTFIDF --> UMAP. However, I will first analyze the WT dataset separately before merging with the unpublished dataset later on (in a future manuscript).
+```{r}
+scATAC_WT <- scATAC_WT_4int_sub
+```
+
+
+# 1b. Use Gene Activity Matrix to View Accessibility Across Single-cell 
+## Normalization (TF-IDF) & Linear Dimensional Reduction (SVD)
+### WT
+```{r}
+scATAC_WT <- RunTFIDF(scATAC_WT)
+scATAC_WT <- FindTopFeatures(scATAC_WT, min.cutoff = 'q0')#find ALL the variable features (peaks) for DimRed.
+#scATAC_WT <- FindTopFeatures(scATAC_WT_fibro, min.cutoff = 'q75')#find the top 25% of peaks
+scATAC_WT <- RunSVD(
+  object = scATAC_WT,
+  assay = 'peaks',
+  reduction.key = 'LSI_',
+  reduction.name = 'lsi')#object = '' specifies Seurat object, assay = 'peaks' specifies slot for raw counts,
+DepthCor(scATAC_WT, n = 40)#view correlation between sequencing depth (technical variation) and the LSI PC ; correlation ~1 is not significant, remove
+#   Identify which PCs are technical variation and don't include them in Step 4's dims = n1:n2 argument)
+ElbowPlot(scATAC_WT, ndims = 40, reduction = 'lsi')
+```
+PC 1 has strong correlation (~1/-1) to sequencing depth, remove from dims argument of UMAP chunk. There are up to 20-30 potentially viable PCs in this dataset w/ >= 1 SD.
+
+## Run and view UMAP of merged scATAC-seq Dataset
+The Depth Correlation plot from the above chunk shows you how much variation is due to sequencing depth. Usually the first PC is variation due to sequencing depth in each dataset. The ElbowPlot lets you know how many PCs contain variable features that are likely biologically relevant. These two give you a dims argument range of usually 2:10-30. In this case, I will selected 2:30.
+```{r}
+scATAC_WT <- RunUMAP(object = scATAC_WT, reduction = 'lsi', umap.method = "umap-learn", dims = 2:30)#adjust dims range based on DepthCor & elbow plots, default is 2:30
+
+scATAC_WT <- FindNeighbors(object = scATAC_WT, reduction = 'lsi', dims = 2:30)#default dims is 2:30
+scATAC_WT <- FindClusters(object = scATAC_WT, verbose = FALSE, algorithm = 3)
+
+#view the UMAP for WT
+DimPlot(object = scATAC_WT, label = TRUE, label.size = 5) + NoLegend()#numbers on clusters
+DimPlot(object = scATAC_WT, label = FALSE, pt.size = 1.0) + NoLegend()#blank
+```
+
+Optional: save the scATAC Seurat Object
+```{r}
+save(scATAC_WT, file = 'W:/Driskell Lab/Thompson et al. 2021/Data/P0 WT/ATAC/Object/scATAC_WT.RData')
+```
+
+
+## Autoexport FeaturePlots
+```{r message=FALSE, warning=FALSE}
+GOI <- c("Inhba", "Crabp1", "Pdgfra", "Twist2", "Lum", "Dkk2", "Dkk1", "Ly6a", "Dpp4", "Dlk1", "Coch", "Meox2",
+          "Acta2", "Lrrc15", "Rgs5", "Fabp4", "Pecam1", "Mbp", "Sox10", "Msc", "Ttn", "Prdm1", "Pparg", "Itga8",
+          "Tyrp1", "Dct", "Alas2", "Ptprc", "Cd14", "Cd68", "Icos", "Nkg7", "Neurl3", "Epcam", "Fcgr3",
+          "Krt28", "Krt14", "Krt17", "Krt5", "Lef1", "Mki67", "Adipoq", 
+          "Gpx3", "Sox2", "Lrig1", "a", "Corin", "Mef2c", "Hic1", "Pdgfrb", "Runx1")
+path_out <- 'W:/Driskell Lab/Thompson et al. 2021/Data/P0 WT/ATAC/FeaturePlot(RNA)/'
+DefaultAssay(scATAC_WT) <- 'RNA'
+
+## View WT Whole Gene Accessibility ##
+tic('FeaturePlot auto-export')
+#Export loop for FeaturePlot() for each Gene in GOI list
+n_plot <- 1
+while (n_plot < length(GOI) + 1) {
+  p1 <- FeaturePlot(object = scATAC_WT,
+                    features = GOI[n_plot],
+                    pt.size = 0.1,
+                    order = FALSE)#iterate through the genes of interest vector inputting their coordinates
+  
+  #print(p1)#spare the markdown file saving tons of plots
+  
+  #save the FeaturePlots automatically
+  ggsave(plot = p1, filename = paste(GOI[n_plot], 'FeaturePlot.png', sep = ' '), path = path_out,
+         width = 6, height = 3, units = 'in')
+  n_plot <- n_plot + 1
+}
+toc()
+```
+### Quick QC Check
+```{r}
+FeaturePlot(scATAC_WT, features = c('passed_filters'))
+FeaturePlot(scATAC_WT, features = c('nFeature_peaks'))
+
+```
+The distribution of QC metrics appears consistent across the clusters, so there do not appear to be clusters driven by differences in metadata.
+
+### Change Resolution
+```{r message=FALSE, warning=FALSE}
+scATAC_WT3 <- FindClusters(scATAC_WT, verbose = FALSE, algorithm = 3, resolution = 0.3, graph.name = 'peaks_snn')#default is algorithm = 1 (Louvain), 3 = SLM
+
+DimPlot(scATAC_WT3, label = TRUE, pt.size = 1.0, label.size = 6) + NoLegend()#numbers on clusters
+DimPlot(scATAC_WT3, label = FALSE, pt.size = 1.0) + NoLegend()#no labels (to label in photoshop)
+
+VlnPlot(
+  object = scATAC_WT3,
+  features = c('pct_reads_in_peaks', 'nFeature_peaks', 'passed_filters'),
+  group.by = 'seurat_clusters',
+  pt.size = 0.2, ncol = 3)
+```
+There do not appear to be any clusters that are driven by outliers in any of the major QC metrics, suggesting that my QC filtering thresholds effectively removed low quality cells and doublets.
+
+### Automated Peakmap export (Peakmaps are the best validation for accessibility)
+Peakmaps, generated by CoveragePlot() in Signac, allow you to look at the accessibility across a genomic region by plotting the peak reads in the fragments.tsv file, aggregated by each cluster, along a genomic track.
+```{r, warning=FALSE, message=FALSE}
+## Define Constants ##
+path_out <- 'W:/Driskell Lab/Thompson et al. 2021/Data/P0 WT/ATAC/Peakmap_res0.3/'
+
+GOI <- c("Inhba", "Crabp1", "Pdgfra", "Twist2", "Lum", "Dkk2", "Dkk1", "Ly6a", "Dpp4", "Dlk1", "Coch", "Meox2", "Acan", "Dpt", "Flt4",
+          "Acta2", "Lrrc15", "Rgs5", "Fabp4", "Pecam1", "Mbp", "Sox10", "Msc", "Ttn", "Prdm1", "Pparg", "Cebpa", "Itga8", "Cspg4", 
+         "Myct1", "Tyrp1", "Dct", "Alas2", "Ptprc", "Cd14", "Cd68", "Icos", "Nkg7", "Neurl3", "Epcam", "Fcgr3", "Adipoq", "Krt14", 
+         "Lef1", "Mki67", "She", "Gpx3", "Plac8", "Corin", "Mef2c", "Hic1", "Pdgfrb", "Runx1", "Runx2", "Runx3")#initialize a list of genes you are interested in viewing the accessibility of
+
+DefaultAssay(scATAC_WT3) <- 'peaks'#can do CoveragePlot to look at ANY of these genes and 'Promoter' better recapitulates the peak heights across a gene region
+
+## Acquire Coordinates for GOI ##
+#create granges object with TSS positions
+gene.ranges <- genes(EnsDb.Mmusculus.v79)
+seqlevelsStyle(gene.ranges) <- 'UCSC'
+gene.ranges <- gene.ranges[gene.ranges$gene_biotype == 'protein_coding', ]
+gene.ranges <- keepStandardChromosomes(gene.ranges, pruning.mode = 'coarse')# extend coordinates upstream to include the promoter
+
+genebodyandpromoter.coords <- Extend(x = gene.ranges, upstream = 2000, downstream = 0)#Signac default, holds each gene's genomic coordinates
+genebodyandpromoter.coords.df <- as.data.frame(genebodyandpromoter.coords)#convert the Granges object of all genes' coordinates to a dataframe for easy datamining
+gene_coords <- data.frame("Gene" = genebodyandpromoter.coords.df$gene_name, "Coord" = paste(genebodyandpromoter.coords.df$seqnames, "-", genebodyandpromoter.coords.df$start, "-", genebodyandpromoter.coords.df$end, sep = ''))
+gene_key <- gene_coords$Gene; coords_key <- gene_coords$Coord#get vectors of the gene names and gene coordinates
+
+##generate a dataframe with all gene names and their gene body + promoter coordinates
+tic('Peakmap Auto-export Loop')
+total_loops <- 0#initialize a counter for number of loops through GOI
+for (gene in GOI) {
+  temp_i <- pmatch(gene, gene_key, duplicates.ok = FALSE)#get index position of gene of interest (exact) matching the gene name corresponding to gene coord
+  
+  #special condition to initiate loop dataframe object
+  if (total_loops == 0) {
+    df_master <- data.frame("GOI" = gene, "Gene" = gene_key[temp_i], "Coord" = coords_key[temp_i])#store the Gene of Interest, check that the correct index gene name matches, then same index gene coordinates
+  }
+  
+  #all other matches
+  if (total_loops > 0) {
+    df_temp <- data.frame("GOI" = gene, "Gene" = gene_key[temp_i], "Coord" = coords_key[temp_i])#store the new gene match and matched coordinates
+    df_master <- rbind.data.frame(df_master, df_temp)#merge the temp row into the growing df
+  }
+  total_loops <- total_loops + 1
+}
+
+GOI_Coord_df <- df_master#dataframe of genes of interest w/ their respective coordinates for gene body + promoter
+
+
+## Export loop for CoveragePlot() ##
+n_plot <- 1
+while (n_plot < nrow(GOI_Coord_df) + 1) {
+    p1 <- CoveragePlot(
+            object = scATAC_WT3,
+            region = GOI_Coord_df[n_plot, 3],
+            extend.upstream = 5000,
+            extend.downstream = 5000)#iterate through the genes of interest vector inputting their coordinates
+
+    #save the CoveragePlots automatically
+    ggsave(plot = p1, filename = paste(GOI_Coord_df[n_plot, 1], 'CoveragePlot.png', sep = ' '), 
+           path = path_out,
+           width = 16, height = 12, units = 'in')
+
+    n_plot <- n_plot + 1
+}
+toc()
+```
+
+## Rename clusters based on cell types
+Using the FeaturePlot and Peakmap for canonical cell type/lineage markers, we CAN identify cell types from scATAC-seq data. However, due to accessibility giving us a potential for expression, we use multiple canonical markers to confirm a cell type. E.g. fibroblasts have the highest accessibility for both Twist2 (dermo1) and Pdgfra of all the other cell types.
+```{r message=FALSE, warning=FALSE}
+#updated renaming convention in Seurat 3.0.0+ and Signac 1.0.0+
+new.cluster.ids.atac <- c('0 PF', '1 RF', '2 DP', '3 Krtno', '4 Fascia', '5 Adipo BV', 
+                         '6 Pericyte', '7 Div Fibro', '8 Schwann Cell', '9 Macrophage', '10 Adipo RF', 
+                         '11 BV', '12 Skeletal Muscle', '13 NK Cell')
+names(new.cluster.ids.atac) <- levels(scATAC_WT3)
+scATAC_WT3 <- RenameIdents(scATAC_WT3, new.cluster.ids.atac)
+
+DimPlot(scATAC_WT3, label = FALSE, pt.size = 1.0) + NoLegend()#blank
+DimPlot(scATAC_WT3, label = FALSE, pt.size = 1.0)#legend w/ new names
+```
+
+Optional: save the scATAC Seurat Object
+```{r}
+save(scATAC_WT3, file = 'W:/Driskell Lab/Thompson et al. 2021/Data/P0 WT/ATAC/Object/scATAC_WT3.RData')
+```
+
+## Recolor the UMAP to View the Clusters by their Lineage
+```{r fig.height=12, fig.width=12, message=FALSE, warning=FALSE}
+scATAC_fig <- scATAC_WT3
+levels(scATAC_fig) <- c('2 DP', '0 PF', '7 Div Fibro', '1 RF', '10 Adipo RF', '4 Fascia', 
+                        '6 Pericyte', '5 Adipo BV', '11 BV', '12 Skeletal Muscle', 
+                        '3 Krtno', '8 Schwann Cell', 
+                        '9 Macrophage', '13 NK Cell')
+umap_cols <- c('#00441b', '#006d2c', '#238b45', '#41ab5d', '#a1d99b', '#74c476',
+               '#7fcdbb', '#8c6bb1', '#88419d', '#f768a1',
+               '#225ea8', '#fc8d59', 
+               '#a50f15', '#ef3b2c')
+DimPlot(scATAC_fig, pt.size = 2.0, cols = umap_cols, label = FALSE) + NoLegend()
+```
+
+## Recolor the UMAP to View the Clusters by their Lineage
+```{r fig.height=8, fig.width=12, message=FALSE, warning=FALSE}
+scATAC_fig <- scATAC_WT3
+levels(scATAC_fig) <- c('2 DP', '0 PF', '7 Div Fibro', '1 RF', '10 Adipo RF', '4 Fascia', 
+                        '6 Pericyte', '5 Adipo BV', '11 BV', '12 Skeletal Muscle', 
+                        '3 Krtno', '8 Schwann Cell', 
+                        '9 Macrophage', '13 NK Cell')
+umap_cols <- c('#00441b', '#006d2c', '#238b45', '#41ab5d', '#a1d99b', '#74c476',
+               '#7fcdbb', '#8c6bb1', '#88419d', '#f768a1',
+               '#225ea8', '#fc8d59', 
+               '#a50f15', '#ef3b2c')
+DimPlot(scATAC_fig, pt.size = 2.0, cols = umap_cols, label = FALSE) + NoLegend()
+```
+
+
+## Differential Accessibility Analysis
+```{r message=FALSE, warning=FALSE}
+DefaultAssay(scATAC_WT3) <- 'RNA'
+path_out <- 'W:/Driskell Lab/Thompson et al. 2021/Data/P0 WT/ATAC/DAG(RNA)_res0.3/'#path to export folder
+
+COI <- c('0 PF', '1 RF', '2 DP', '3 Krtno', '4 Fascia', '5 Adipo BV', '6 Pericyte', '7 Div Fibro', 
+         '8 Schwann Cell', '9 Macrophage', '10 Adipo RF', '11 BV', '12 Skeletal Muscle', '13 NK Cell')
+
+tic("scATAC Differentially Accessible Genes ('RNA' slot) AutoExport Loop")
+n_loops <- 1
+while (n_loops < length(COI) + 1) {
+#Find positive markers (upregulated genes)
+cluster.markers.temp <- FindMarkers(scATAC_WT3, ident.1 = COI[n_loops], min.pct = 0.01, logfc.threshold = 0.1, assay = 'RNA', only.pos = TRUE)#we want to keep genes in the ident.2 slot that are very lowly represented, b/c if pct.1 is 0.6, but pct.2 (all other clusters) is 0.05, that suggests the gene is very specifically accessible in the cluster in ident.1, but the algorithm will ignore that gene if min.pct is 0.2, as in the Signac default
+
+#head(cluster.markers.temp, n = 30)
+cluster.markers.temp$Gene = rownames(cluster.markers.temp)#add a column for the gene name for the promoter score
+cluster.markers.temp$pct.2[cluster.markers.temp$pct.2 == 0] <- NA#corrects pct ratio error if pct.2=0, it shouldn't b/c of min.pct, but just in case
+cluster.markers.temp <- na.omit(cluster.markers.temp)#remove rows with NA
+cluster.markers.temp$Pct_Ratio = cluster.markers.temp$pct.1 / cluster.markers.temp$pct.2#compute ratio of how much the cluster of interest expresses compared to all others
+cluster.markers.temp <- cluster.markers.temp %>% dplyr::select('Gene', everything())#move gene column to the front of the dataframe
+cluster.markers.temp$'dPct1*dFold' = cluster.markers.temp$Pct_Ratio * cluster.markers.temp$avg_log2FC
+#cluster.markers.temp <- cluster.markers.temp[cluster.markers.temp$`dPct1*dFold` > quantile(cluster.markers.temp$`dPct1*dFold`, 0.95), ]#keep only the top 95% of upregulated genes in ident.1
+cluster.markers.temp <- cluster.markers.temp[order(cluster.markers.temp$`dPct1*dFold`, decreasing = TRUE), ]
+
+write.csv(cluster.markers.temp, file = paste(path_out, COI[n_loops], '_pos_markers.csv', sep = ''), row.names = FALSE)
+
+n_loops <- n_loops + 1#track for when all clusters of one dataset have been run through
+}
+
+toc()#end timer
+```
+### DAGs of whole-fibroblast supercluster vs all other clusters
+```{r message=FALSE, warning=FALSE}
+path_out <- 'W:/Driskell Lab/Thompson et al. 2021/Data/P0 WT/ATAC/DAG(RNA)_res0.3/'#path to export folder
+
+cluster.markers.temp <- FindMarkers(scATAC_WT3, ident.1 = c('0 PF', '1 RF', '2 DP', '4 Fascia', '7 Div Fibro', '10 Adipo RF'), min.pct = 0.01, logfc.threshold = 0.1, assay = 'RNA', only.pos = TRUE)#we want to keep genes in the ident.2 slot that are very lowly represented, b/c if pct.1 is 0.6, but pct.2 (all other clusters) is 0.05, that suggests the gene is very specifically accessible in the cluster in ident.1, but the algorithm will ignore that gene if min.pct is 0.2, as in the Signac default
+
+#head(cluster.markers.temp, n = 30)
+cluster.markers.temp$Gene = rownames(cluster.markers.temp)#add a column for the gene name for the promoter score
+cluster.markers.temp$pct.2[cluster.markers.temp$pct.2 == 0] <- NA#corrects pct ratio error if pct.2=0, it shouldn't b/c of min.pct, but just in case
+cluster.markers.temp <- na.omit(cluster.markers.temp)#remove rows with NA
+cluster.markers.temp$Pct_Ratio = cluster.markers.temp$pct.1 / cluster.markers.temp$pct.2#compute ratio of how much the cluster of interest expresses compared to all others
+cluster.markers.temp <- cluster.markers.temp %>% dplyr::select('Gene', everything())#move gene column to the front of the dataframe
+cluster.markers.temp$'dPct1*dFold' = cluster.markers.temp$Pct_Ratio * cluster.markers.temp$avg_log2FC
+#cluster.markers.temp <- cluster.markers.temp[cluster.markers.temp$`dPct1*dFold` > quantile(cluster.markers.temp$`dPct1*dFold`, 0.95), ]#keep only the top 95% of upregulated genes in ident.1
+cluster.markers.temp <- cluster.markers.temp[order(cluster.markers.temp$`dPct1*dFold`, decreasing = TRUE), ]
+
+write.csv(cluster.markers.temp, file = paste(path_out, 'fibroblasts_pos_markers.csv', sep = ''), row.names = FALSE)
+
+```
+
+
+# 2. Fibroblast Subset
+First use subset() to choose the clusters of the cell lineage of interest (the fibroblasts).
+```{r, warning=FALSE, message=FALSE}
+scATAC_WT2 <- FindClusters(scATAC_WT2, verbose = FALSE, algorithm = 3, resolution = 0.6, graph.name = 'peaks_snn')#default is algorithm = 1 (Louvain), 3 = SLM
+new.cluster.ids.atac <- c('0 PF', '1 Fibro', '2 PF', '3 DP', '4 RF', '5 Krtno', 
+                         '6 Krtno', '7 BV', '8 Pericyte', '9 Adipo RF', '10 PF', 
+                         '11 Schwann Cell', '12 Leuk', '13 PF',  '14 BV', '15 Skeletal Muscle',
+                         '16 NK Cell')#determined by featureplots since the cell's read does not depend on the resolution of the clusters
+names(new.cluster.ids.atac) <- levels(scATAC_WT2)
+scATAC_WT2 <- RenameIdents(scATAC_WT2, new.cluster.ids.atac)
+
+scATAC_sub <- subset(scATAC_WT2, idents = c('0 PF', '1 Fibro', '2 PF', '3 DP', '4 RF', '9 Adipo RF', '10 PF', '13 PF'))#get the fibroblasts
+
+## RE:Normalization (TF-IDF) & Linear Dimensional Reduction (SVD) ##
+scATAC_sub <- RunTFIDF(scATAC_sub)
+scATAC_sub <- FindTopFeatures(scATAC_sub, min.cutoff = 'q0')#find ALL the variable features (peaks) for DimRed.
+#scATAC_sub <- FindTopFeatures(scATAC_sub_fibro, min.cutoff = 'q75')#find the top 25% of peaks
+scATAC_sub <- RunSVD(
+  object = scATAC_sub,
+  assay = 'peaks',
+  reduction.key = 'LSI_',
+  reduction.name = 'lsi')#object = '' specifies Seurat object, assay = 'peaks' specifies slot for raw counts,
+
+DepthCor(scATAC_sub, n = 40)#view correlation between sequencing depth (technical variation) and the LSI PC ; correlation ~1 is not significant, remove
+#   Identify which PCs are technical variation and don't include them in Step 4's dims = n1:n2 argument)
+ElbowPlot(scATAC_sub, ndims = 40, reduction = 'lsi')
+```
+Next, pick the number of PCs (ndims) that you would like to use to recluster the subsetted single cells. I picked 2:10 b/c these has a StdDev >= 1
+```{r, warning=FALSE, message=FALSE}
+scATAC_sub <- RunUMAP(object = scATAC_sub, reduction = 'lsi', umap.method = "umap-learn", dims = 2:10)#adjust dims range based on DepthCor & elbow plots, default is 2:30
+scATAC_sub <- FindNeighbors(object = scATAC_sub, reduction = 'lsi', dims = 2:10)#default dims is 2:30
+scATAC_sub <- FindClusters(object = scATAC_sub, verbose = FALSE, algorithm = 3, graph.name = 'peaks_snn')#change resolution to view the main groups of distinct cluster
+```
+### View the DimPlots of the UMAP
+```{r}
+#view the new UMAPs for the subset of the integrated datsets
+DimPlot(object = scATAC_sub, label = TRUE, label.size = 5) + NoLegend()#numbers on clusters
+DimPlot(object = scATAC_sub, label = FALSE, pt.size = 1.0) + NoLegend()#blank
+```
+
+
+### View FeaturePlots
+```{r message=FALSE, warning=FALSE}
+## Autoexport FeaturePlots
+#Change the slot and output folder to each slot of gene activity matrix for easy comparison
+
+GOI <- c("Inhba", "Crabp1", "Pdgfra", "Twist2", "Lum", "Dkk2", "Dkk1", "Ly6a", "Dpp4", "Dlk1", "Coch", "Meox2", "Bmp4", "Myo10",
+          "Acta2", "Lrrc15", "Rgs5", "Fabp4", "Prdm1", "Pparg", "Itga8", "Lef1", "Adipoq", "Col1a1", "Col3a1", "Lum", "Wnt3a", "Cd24a",
+          "Gpx3", "Lrig1", "Sox2", "Corin", "Mef2c", "Hic1", "Pdgfrb", "Runx1")
+path_out <- 'W:/Driskell Lab/Thompson et al. 2021/Data/P0 WT/ATAC/Fibroblasts/FeaturePlot(RNA)/'
+
+DefaultAssay(scATAC_sub) <- 'RNA'
+
+## View WT Promoter Accessibility ##
+tic('FeaturePlot auto-export')
+#Export loop for FeaturePlot() for each Gene in GOI list
+n_plot <- 1
+while (n_plot < length(GOI) + 1) {
+  p1 <- FeaturePlot(object = scATAC_sub,
+                    features = GOI[n_plot],
+                    pt.size = 4.0,
+                    order = FALSE)#iterate through the genes of interest vector inputting their coordinates, using default colors
+
+  p2 <- FeaturePlot(object = scATAC_sub,
+                    features = GOI[n_plot],
+                    pt.size = 4.0,
+                    order = FALSE) + scale_colour_gradientn(colours = divergentcolors_RYB(22))#use RYB palette (initialized at top of page)
+  
+  
+  #print(p1)#spare the markdown file saving tons of plots
+  #print(p2)#spare the markdown file saving tons of plots
+  
+  #save the FeaturePlots automatically
+  ggsave(plot = p1, filename = paste(GOI[n_plot], 'FeaturePlot (Def).png', sep = ' '), path = path_out,
+         width = 16, height = 12, units = 'in')
+  ggsave(plot = p2, filename = paste(GOI[n_plot], 'FeaturePlot (RYB).png', sep = ' '), path = path_out,
+         width = 16, height = 12, units = 'in')
+  n_plot <- n_plot + 1
+}
+toc()
+```
+
+## Investigate QC -- is there QC heterogeneity driving the clustering?
+```{r message=FALSE, warning=FALSE}
+VlnPlot(
+  object = scATAC_sub,
+  features = c('pct_reads_in_peaks', 'peak_region_fragments', 'passed_filters'),
+  group.by = 'seurat_clusters',
+  pt.size = 0.2, ncol = 3)
+```
+There does not appear to be any difference in clusters based on QC metrics, meaning these clusterings are purely based on differential chromatin accessibility.
+
+##change resolution
+There appear to be too many clusters based upon the featureplots, therefore I will reduce the number of clusters slightly to better reflect the heterogeneity of the data.
+```{r message=FALSE, warning=FALSE}
+scATAC_sub2 <- FindClusters(scATAC_sub, verbose = FALSE, algorithm = 3, resolution = .6, graph.name = 'peaks_snn')#default is algorithm = 1 (Louvain), 3 = SLM
+
+DimPlot(scATAC_sub2, label = TRUE, pt.size = 1.0, label.size = 6) + NoLegend()#numbers on clusters
+DimPlot(scATAC_sub2, label = FALSE, pt.size = 1.0) + NoLegend()#no labels (to label in photoshop)
+```
+
+### Rename clusters
+```{r}
+#updated renaming convention in Seurat 3.0.0+ and Signac 1.0.0+
+new.cluster.ids.atac <- c('0 RF', '1 PF', '2 PF', '3 PF', '4 RF', '5 DP', 
+                         '6 PF', '7 Fascia RF', '8 Adipo RF')
+names(new.cluster.ids.atac) <- levels(scATAC_sub2)
+scATAC_sub2 <- RenameIdents(scATAC_sub2, new.cluster.ids.atac)
+
+DimPlot(scATAC_sub2, label = FALSE, pt.size = 1.0) + NoLegend()#blank
+DimPlot(scATAC_sub2, label = FALSE, pt.size = 1.0)#legend w/ new names
+```
+Optional: save scATAC object
+```{r}
+save(scATAC_sub2, scATAC_sub, file = 'W:/Driskell Lab/Thompson et al. 2021/Data/P0 WT/ATAC/Fibroblasts/Object/scATAC_fibro_sub.RData')
+```
+
+# Figure Building
+We want to manually color the fibroblast subset clusters. Also, after using scATAC_sub2 Seurat object for scRNA DEG correlation w/ scATAC clusters (separate script), I renamed cluster '2 PF' to '2 Div Fibro', since that cluster only had positive scaled accessibility scores for dividing fibroblast DEGs.
+```{r fig.height=12, fig.width=12, message=FALSE, warning=FALSE}
+new.cluster.ids.atac <- c('0 RF', '1 PF', '2 Div Fibro', '3 PF', '4 RF', '5 DP', 
+                         '6 PF', '7 Fascia RF', '8 Adipo RF')
+names(new.cluster.ids.atac) <- levels(scATAC_sub2)
+scATAC_sub3 <- RenameIdents(scATAC_sub2, new.cluster.ids.atac)
+
+DimPlot(scATAC_sub3, cols = c("#f46d43", "#66bd63", "#a6d96a", "#006837", "#d73027", "#3288bd", "#1a9850", "#8e0152", "#a50026"), 
+        pt.size = 1.5) + NoLegend()
+DimPlot(scATAC_sub3, cols = c("#f46d43", "#66bd63", "#a6d96a", "#006837", "#d73027", "#3288bd", "#1a9850", "#8e0152", "#a50026"),
+        pt.size = 3) + NoLegend()#8c510a
+DimPlot(scATAC_sub3, cols = c("#f46d43", "#66bd63", "#8c510a", "#006837", "#d73027", "#3288bd", "#1a9850", "#8e0152", "#a50026"),
+        pt.size = 3) + NoLegend()#dividing fibroblast cluster recolored to match scRNA dividing fibroblast cluster color
+```
+
+Different proportions:
+```{r fig.height=8, fig.width=12, message=FALSE, warning=FALSE}
+DimPlot(scATAC_sub3, cols = c("#f46d43", "#66bd63", "#a6d96a", "#006837", "#d73027", "#3288bd", "#1a9850", "#8e0152", "#a50026"), 
+        pt.size = 1.5) + NoLegend()
+DimPlot(scATAC_sub3, cols = c("#f46d43", "#66bd63", "#a6d96a", "#006837", "#d73027", "#3288bd", "#1a9850", "#8e0152", "#a50026"),
+        pt.size = 3) + NoLegend()#8c510a
+DimPlot(scATAC_sub3, cols = c("#f46d43", "#66bd63", "#8c510a", "#006837", "#d73027", "#3288bd", "#1a9850", "#8e0152", "#a50026"),
+        pt.size = 3) + NoLegend()#dividing fibroblast cluster recolored to match scRNA dividing fibroblast cluster color
+```
+
+```{r}
+save(scATAC_sub3, file = 'W:/Driskell Lab/Thompson et al. 2021/Data/P0 WT/ATAC/Fibroblasts/Object/scATAC_fibro_sub3.RData')
+```
+
+
+### Automated Peakmap export (Peakmaps are the best validation for accessibility)
+Peakmaps, generated by CoveragePlot() in Signac, allow you to look at the accessibility across a genomic region by plotting the peak reads in the fragments.tsv file, aggregated by each cluster, along a genomic track.
+```{r, warning=FALSE, message=FALSE}
+## Define Constants ##
+path_out <- 'W:/Driskell Lab/Thompson et al. 2021/Data/P0 WT/ATAC/Fibroblasts/Peakmap(fig)/'
+
+GOI <- c("Inhba", "Crabp1", "Pdgfra", "Twist2", "Lum", "Dkk2", "Dkk1", "Ly6a", "Dpp4", "Dlk1", "Coch", "Meox2", "Acan", "Dpt", "Flt4",
+          "Acta2", "Lrrc15", "Fabp4", "Msc", "Ttn", "Prdm1", "Pparg", "Cebpa", "Itga8", "Cspg4", "Myct1", "Adipoq", "Krt14", 
+         "Lef1", "Mki67", "Igfbp6", "Corin", "Mef2c", "Hic1", "Pdgfrb", "Runx1",
+         "Dpt", "Prom1", "En1", "Lrig1", "Col12a1", "Ephb1", "Sobp", "Smoc1", "Notch1", "Spock1", "Bmp3", "Pdpn", "Slc2a10", "Lamc3",
+         "Tfap2c", "Bmp5", "Hey1", "Filip1", "Bbox1", "Camp", "Cxcl9", "Thbs1", "Nfib", "Wnt10a", "Draxin", "Adam23", "Bmp7", "Met",
+         "Lsmem1", "Dcn")#initialize a list of genes you are interested in viewing the accessibility of
+
+scATAC_fig <- scATAC_sub3
+DefaultAssay(scATAC_fig) <- 'peaks'#can do CoveragePlot to look at ANY of these genes
+
+## Acquire Coordinates for GOI ##
+#create granges object with TSS positions
+gene.ranges <- genes(EnsDb.Mmusculus.v79)
+seqlevelsStyle(gene.ranges) <- 'UCSC'
+gene.ranges <- gene.ranges[gene.ranges$gene_biotype == 'protein_coding', ]
+gene.ranges <- keepStandardChromosomes(gene.ranges, pruning.mode = 'coarse')# extend coordinates upstream to include the promoter
+
+# extend coordinates upstream to include the promoter
+genebodyandpromoter.coords <- Extend(x = gene.ranges, upstream = 2000, downstream = 0)#Signac default, holds each gene's genomic coordinates
+genebodyandpromoter.coords.df <- as.data.frame(genebodyandpromoter.coords)#convert the Granges object of all genes' coordinates to a dataframe for easy datamining
+gene_coords <- data.frame("Gene" = genebodyandpromoter.coords.df$gene_name, "Coord" = paste(genebodyandpromoter.coords.df$seqnames, "-", genebodyandpromoter.coords.df$start, "-", genebodyandpromoter.coords.df$end, sep = ''))
+gene_key <- gene_coords$Gene; coords_key <- gene_coords$Coord#get vectors of the gene names and gene coordinates
+
+##generate a dataframe with all gene names and their gene body + promoter coordinates
+tic('Peakmap Auto-export Loop')
+total_loops <- 0#initialize a counter for number of loops through GOI
+for (gene in GOI) {
+  temp_i <- pmatch(gene, gene_key, duplicates.ok = FALSE)#get index position of gene of interest (exact) matching the gene name corresponding to gene coord
+  
+  #special condition to initiate loop dataframe object
+  if (total_loops == 0) {
+    df_master <- data.frame("GOI" = gene, "Gene" = gene_key[temp_i], "Coord" = coords_key[temp_i])#store the Gene of Interest, check that the correct index gene name matches, then same index gene coordinates
+  }
+  
+  #all other matches
+  if (total_loops > 0) {
+    df_temp <- data.frame("GOI" = gene, "Gene" = gene_key[temp_i], "Coord" = coords_key[temp_i])#store the new gene match and matched coordinates
+    df_master <- rbind.data.frame(df_master, df_temp)#merge the temp row into the growing df
+  }
+  total_loops <- total_loops + 1
+}
+
+GOI_Coord_df <- df_master#dataframe of genes of interest w/ their respective coordinates for gene body + promoter
+
+
+## Export loop for CoveragePlot() ##
+n_plot <- 1
+while (n_plot < nrow(GOI_Coord_df) + 1) {
+    p1 <- CoveragePlot(
+            object = scATAC_fig,
+            region = GOI_Coord_df[n_plot, 3],
+            extend.upstream = 5000,
+            extend.downstream = 5000, annotation = TRUE)
+    p1 <- p1 & scale_fill_manual(aesthetics = "fill", values = c('0 RF' = "#f46d43", '1 PF' = "#66bd63", '2 Div Fibro' = "#a6d96a",
+                                                       '3 PF' = "#006837", '4 RF' = "#d73027", '5 DP' = "#3288bd",
+                                                       '6 PF' = "#1a9850", '7 Fascia RF' = "#8e0152", '8 Adipo RF' = "#a50026"))#iterate through the genes of interest vector inputting their coordinates; use patchwork's '&' operator to allow color change to clusters
+  
+    #save the CoveragePlots automatically
+    ggsave(plot = p1, filename = paste(GOI_Coord_df[n_plot, 1], 'CoveragePlot.png', sep = ' '), 
+           path = path_out,
+           width = 16, height = 12, units = 'in')
+    ggsave(plot = p1, filename = paste(GOI_Coord_df[n_plot, 1], 'CoveragePlot.png', sep = ' '), 
+           path = paste(path_out, "6x4in/", sep = ''),
+           width = 6, height = 4, units = 'in')
+
+    n_plot <- n_plot + 1
+}
+toc()
+```
+
+## Differential Accessibility
+```{r message=FALSE, warning=FALSE}
+DefaultAssay(scATAC_sub3) <- 'RNA'
+path_out <- 'W:/Driskell Lab/Thompson et al. 2021/Data/P0 WT/ATAC/Fibroblasts/Diff_Analysis/'#path to export folder
+
+COI <- c('0 RF', '1 PF', '2 Div Fibro', '3 PF', '4 RF', '5 DP', '6 PF', '7 Fascia RF', '8 Adipo RF')
+
+tic("scATAC Differentially Accessible Genes ('RNA' slot) AutoExport Loop")
+n_loops <- 1
+while (n_loops < length(COI) + 1) {
+#Find positive markers (upregulated genes)
+cluster.markers.temp <- FindMarkers(scATAC_sub3, ident.1 = COI[n_loops], min.pct = 0.01, logfc.threshold = 0.1, assay = 'RNA', only.pos = TRUE)#we want to keep genes in the ident.2 slot that are very lowly represented, b/c if pct.1 is 0.6, but pct.2 (all other clusters) is 0.05, that suggests the gene is very specifically accessible in the cluster in ident.1, but the algorithm will ignore that gene if min.pct is 0.2, as in the Signac default
+
+#head(cluster.markers.temp, n = 30)
+cluster.markers.temp$Gene = rownames(cluster.markers.temp)#add a column for the gene name for the promoter score
+cluster.markers.temp$pct.2[cluster.markers.temp$pct.2 == 0] <- NA#corrects pct ratio error if pct.2=0, it shouldn't b/c of min.pct, but just in case
+cluster.markers.temp <- na.omit(cluster.markers.temp)#remove rows with NA
+cluster.markers.temp$Pct_Ratio = cluster.markers.temp$pct.1 / cluster.markers.temp$pct.2#compute ratio of how much the cluster of interest expresses compared to all others
+cluster.markers.temp <- cluster.markers.temp %>% dplyr::select('Gene', everything())#move gene column to the front of the dataframe
+cluster.markers.temp$'dPct1*dFold' = cluster.markers.temp$Pct_Ratio * cluster.markers.temp$avg_log2FC
+#cluster.markers.temp <- cluster.markers.temp[cluster.markers.temp$`dPct1*dFold` > quantile(cluster.markers.temp$`dPct1*dFold`, 0.95), ]#keep only the top 95% of upregulated genes in ident.1
+cluster.markers.temp <- cluster.markers.temp[order(cluster.markers.temp$`dPct1*dFold`, decreasing = TRUE), ]
+
+write.csv(cluster.markers.temp, file = paste(path_out, COI[n_loops], '_pos_markers.csv', sep = ''), row.names = FALSE)
+
+n_loops <- n_loops + 1#track for when all clusters of one dataset have been run through
+}
+
+toc()#end timer
+```
+
+### Differential Accessibility between specifically PF and RF
+```{r message=FALSE, warning=FALSE}
+DefaultAssay(scATAC_sub2) <- 'RNA'
+path_out <- 'W:/Driskell Lab/Thompson et al. 2021/Data/P0 WT/ATAC/Fibroblasts/Diff_Analysis/'#path to export folder
+
+COI <- c('0 RF', '1 PF', '2 Div Fibro', '3 PF', '4 RF', '5 DP', '6 PF', '7 Fascia RF', '8 Adipo RF')
+
+tic("scATAC Differentially Accessible Genes ('RNA' slot) AutoExport Loop")
+
+## PF not RF ##
+#Find positive markers (upregulated genes)
+cluster.markers.temp <- FindMarkers(scATAC_sub2, ident.1 = c('1 PF', '3 PF'), ident.2 = c('0 RF', '4 RF'),
+                                    min.pct = 0.01, logfc.threshold = 0.1, assay = 'RNA', only.pos = TRUE)#we want to keep genes in the ident.2 slot that are very lowly represented, b/c if pct.1 is 0.6, but pct.2 (all other clusters) is 0.05, that suggests the gene is very specifically accessible in the cluster in ident.1, but the algorithm will ignore that gene if min.pct is 0.2, as in the Signac default
+
+#head(cluster.markers.temp, n = 30)
+cluster.markers.temp$Gene = rownames(cluster.markers.temp)#add a column for the gene name for the promoter score
+cluster.markers.temp$pct.2[cluster.markers.temp$pct.2 == 0] <- NA#corrects pct ratio error if pct.2=0, it shouldn't b/c of min.pct, but just in case
+cluster.markers.temp <- na.omit(cluster.markers.temp)#remove rows with NA
+cluster.markers.temp$Pct_Ratio = cluster.markers.temp$pct.1 / cluster.markers.temp$pct.2#compute ratio of how much the cluster of interest expresses compared to all others
+cluster.markers.temp <- cluster.markers.temp %>% dplyr::select('Gene', everything())#move gene column to the front of the dataframe
+cluster.markers.temp$'dPct1*dFold' = cluster.markers.temp$Pct_Ratio * cluster.markers.temp$avg_log2FC
+#cluster.markers.temp <- cluster.markers.temp[cluster.markers.temp$`dPct1*dFold` > quantile(cluster.markers.temp$`dPct1*dFold`, 0.95), ]#keep only the top 95% of upregulated genes in ident.1
+cluster.markers.temp <- cluster.markers.temp[order(cluster.markers.temp$`dPct1*dFold`, decreasing = TRUE), ]
+
+write.csv(cluster.markers.temp, file = paste(path_out, 'PF_vs_RF_pos_markers.csv', sep = ''), row.names = FALSE)
+
+## RF not PF ##
+cluster.markers.temp <- FindMarkers(scATAC_sub2, ident.1 = c('0 RF', '4 RF'), ident.2 = c('1 PF', '3 PF'),
+                                    min.pct = 0.01, logfc.threshold = 0.1, assay = 'RNA', only.pos = TRUE)#we want to keep genes in the ident.2 slot that are very lowly represented, b/c if pct.1 is 0.6, but pct.2 (all other clusters) is 0.05, that suggests the gene is very specifically accessible in the cluster in ident.1, but the algorithm will ignore that gene if min.pct is 0.2, as in the Signac default
+
+#head(cluster.markers.temp, n = 30)
+cluster.markers.temp$Gene = rownames(cluster.markers.temp)#add a column for the gene name for the promoter score
+cluster.markers.temp$pct.2[cluster.markers.temp$pct.2 == 0] <- NA#corrects pct ratio error if pct.2=0, it shouldn't b/c of min.pct, but just in case
+cluster.markers.temp <- na.omit(cluster.markers.temp)#remove rows with NA
+cluster.markers.temp$Pct_Ratio = cluster.markers.temp$pct.1 / cluster.markers.temp$pct.2#compute ratio of how much the cluster of interest expresses compared to all others
+cluster.markers.temp <- cluster.markers.temp %>% dplyr::select('Gene', everything())#move gene column to the front of the dataframe
+cluster.markers.temp$'dPct1*dFold' = cluster.markers.temp$Pct_Ratio * cluster.markers.temp$avg_log2FC
+#cluster.markers.temp <- cluster.markers.temp[cluster.markers.temp$`dPct1*dFold` > quantile(cluster.markers.temp$`dPct1*dFold`, 0.95), ]#keep only the top 95% of upregulated genes in ident.1
+cluster.markers.temp <- cluster.markers.temp[order(cluster.markers.temp$`dPct1*dFold`, decreasing = TRUE), ]
+
+write.csv(cluster.markers.temp, file = paste(path_out, 'RF_vs_PF_pos_markers.csv', sep = ''), row.names = FALSE)
+
+
+toc()#end timer
+```

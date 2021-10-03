@@ -1,7 +1,7 @@
 # Thompson-et-al.-2021
 P0 scATAC-seq and scRNA-seq paper
 
-Users attempting to replicate these results using our exact code may encounter a bug related to loading in the UCSC mm10 genome annotation depending upon their package versions. We have developed a bug fix that can be easily merged into our pipeline, expanding upon comments made on the bioconductor forum (https://github.com/Bioconductor/GenomeInfoDb/issues/27). At least in the package versions used in our analysis, the following bug fix will allow for the creation of a Seurat object for scATAC data that retains full functionality of CoveragePlot() and other scATAC-specific Seurat/Signac functions that pull genomic coordinates from the annotation:
+Users attempting to replicate these results using our exact code may encounter a bug related to loading in the UCSC mm10 genome annotation depending upon their package versions. We have included a bug fix that can be easily merged into our pipeline, expanding upon comments made on the bioconductor forum (https://github.com/Bioconductor/GenomeInfoDb/issues/27). At least in the package versions used in our analysis, the following bug fix will allow for the creation of a Seurat object for scATAC data that retains full functionality of CoveragePlot() and other scATAC-specific Seurat/Signac functions that pull genomic coordinates from the annotation:
 
 Anywhere that genes(EnsDb.Mmusculus.v79) is called, this bug fix must be applied to avoid functions erroring.
 

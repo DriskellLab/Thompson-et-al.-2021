@@ -1,0 +1,250 @@
+---
+title: "scATAC DAG vs. scRNA Cluster Correlation"
+output: html_notebook
+---
+
+
+# Get a list object of the top scATAC clusters' DAGs (Fibro Sub)
+```{r}
+path_in <- 'W:/Driskell Lab/Thompson et al. 2021/Data/P0 WT/ATAC/Fibroblasts/Diff_Analysis/'
+COI <- c('0 RF', '1 PF', '2 Div Fibro', '3 PF', '4 RF', '5 DP', '6 PF', '7 Fascia RF', '8 Adipo RF')#define the cluster IDs from scATAC
+
+rna_genes <- scRNA_WT_fibro2@assays$RNA@data@Dimnames[[1]]
+
+c0_markers <- read.csv(file = paste(path_in, COI[1], '_pos_markers.csv', sep = ''))
+c0_markers <- c0_markers[c0_markers$dPct1.dFold > quantile(c0_markers$dPct1.dFold, 0.95), ]#filter rows to top 5% of DAGs
+c0_markers <- c0_markers[c0_markers$pct.1 >= 0.5, ]#filter out DAGs only expressed in <50% of the cluster, since these are less likely to be major defining markers of that cluster
+c0_markers <- c0_markers[(c0_markers$Gene %in% rna_genes), ]#keep rows of genes found in both datasets
+write.csv(c0_markers, file = paste(path_in, COI[1], '_pos_markers_READY2Int.csv', sep = ''))
+
+c1_markers <- read.csv(file = paste(path_in, COI[2], '_pos_markers.csv', sep = ''))
+c1_markers <- c1_markers[c1_markers$dPct1.dFold > quantile(c1_markers$dPct1.dFold, 0.95), ]#filter rows to top 5% of DAGs
+c1_markers <- c1_markers[c1_markers$pct.1 >= 0.5, ]#filter out DAGs only expressed in <50% of the cluster, since these are less likely to be major defining markers of that cluster
+c1_markers <- c1_markers[(c1_markers$Gene %in% rna_genes), ]#keep rows of genes found in both datasets
+write.csv(c1_markers, file = paste(path_in, COI[2], '_pos_markers_READY2Int.csv', sep = ''))
+
+c2_markers <- read.csv(file = paste(path_in, COI[3], '_pos_markers.csv', sep = ''))
+c2_markers <- c2_markers[c2_markers$dPct1.dFold > quantile(c2_markers$dPct1.dFold, 0.95), ]#filter rows to top 5% of DAGs
+c2_markers <- c2_markers[c2_markers$pct.1 >= 0.5, ]#filter out DAGs only expressed in <10% of the cluster, since these are less likely to be relevant
+c2_markers <- c2_markers[(c2_markers$Gene %in% rna_genes), ]#keep rows of genes found in both datasets
+write.csv(c2_markers, file = paste(path_in, COI[3], '_pos_markers_READY2Int.csv', sep = ''))
+
+c3_markers <- read.csv(file = paste(path_in, COI[4], '_pos_markers.csv', sep = ''))
+c3_markers <- c3_markers[c3_markers$dPct1.dFold > quantile(c3_markers$dPct1.dFold, 0.95), ]#filter rows to top 5% of DAGs
+c3_markers <- c3_markers[c3_markers$pct.1 >= 0.5, ]#filter out DAGs only expressed in <10% of the cluster, since these are less likely to be relevant
+c3_markers <- c3_markers[(c3_markers$Gene %in% rna_genes), ]#keep rows of genes found in both datasets
+write.csv(c3_markers, file = paste(path_in, COI[4], '_pos_markers_READY2Int.csv', sep = ''))
+
+c4_markers <- read.csv(file = paste(path_in, COI[5], '_pos_markers.csv', sep = ''))
+c4_markers <- c4_markers[c4_markers$dPct1.dFold > quantile(c4_markers$dPct1.dFold, 0.95), ]#filter rows to top 5% of DAGs
+c4_markers <- c4_markers[c4_markers$pct.1 >= 0.5, ]#filter out DAGs only expressed in <10% of the cluster, since these are less likely to be relevant
+c4_markers <- c4_markers[(c4_markers$Gene %in% rna_genes), ]#keep rows of genes found in both datasets
+write.csv(c4_markers, file = paste(path_in, COI[5], '_pos_markers_READY2Int.csv', sep = ''))
+
+c5_markers <- read.csv(file = paste(path_in, COI[6], '_pos_markers.csv', sep = ''))
+c5_markers <- c5_markers[c5_markers$dPct1.dFold > quantile(c5_markers$dPct1.dFold, 0.95), ]#filter rows to top 5% of DAGs
+c5_markers <- c5_markers[c5_markers$pct.1 >= 0.5, ]#filter out DAGs only expressed in <10% of the cluster, since these are less likely to be relevant
+c5_markers <- c5_markers[(c5_markers$Gene %in% rna_genes), ]#keep rows of genes found in both datasets
+write.csv(c5_markers, file = paste(path_in, COI[6], '_pos_markers_READY2Int.csv', sep = ''))
+
+c6_markers <- read.csv(file = paste(path_in, COI[7], '_pos_markers.csv', sep = ''))
+c6_markers <- c6_markers[c6_markers$dPct1.dFold > quantile(c6_markers$dPct1.dFold, 0.95), ]#filter rows to top 5% of DAGs
+c6_markers <- c6_markers[c6_markers$pct.1 >= 0.5, ]#filter out DAGs only expressed in <10% of the cluster, since these are less likely to be relevant
+c6_markers <- c6_markers[(c6_markers$Gene %in% rna_genes), ]#keep rows of genes found in both datasets
+write.csv(c6_markers, file = paste(path_in, COI[7], '_pos_markers_READY2Int.csv', sep = ''))
+
+c7_markers <- read.csv(file = paste(path_in, COI[8], '_pos_markers.csv', sep = ''))
+c7_markers <- c7_markers[c7_markers$dPct1.dFold > quantile(c7_markers$dPct1.dFold, 0.95), ]#filter rows to top 5% of DAGs
+c7_markers <- c7_markers[c7_markers$pct.1 >= 0.5, ]#filter out DAGs only expressed in <10% of the cluster, since these are less likely to be relevant
+c7_markers <- c7_markers[(c7_markers$Gene %in% rna_genes), ]#keep rows of genes found in both datasets
+write.csv(c7_markers, file = paste(path_in, COI[8], '_pos_markers_READY2Int.csv', sep = ''))
+
+c8_markers <- read.csv(file = paste(path_in, COI[9], '_pos_markers.csv', sep = ''))
+c8_markers <- c8_markers[c8_markers$dPct1.dFold > quantile(c8_markers$dPct1.dFold, 0.95), ]#filter rows to top 5% of DAGs
+c8_markers <- c8_markers[c8_markers$pct.1 >= 0.5, ]#filter out DAGs only expressed in <10% of the cluster, since these are less likely to be relevant
+c8_markers <- c8_markers[(c8_markers$Gene %in% rna_genes), ]#keep rows of genes found in both datasets
+write.csv(c8_markers, file = paste(path_in, COI[9], '_pos_markers_READY2Int.csv', sep = ''))
+
+
+## extract the column of DAG names from the given cluster ##
+c0_DAG <- c0_markers$Gene
+c1_DAG <- c1_markers$Gene
+c2_DAG <- c2_markers$Gene
+c3_DAG <- c3_markers$Gene
+c4_DAG <- c4_markers$Gene
+c5_DAG <- c5_markers$Gene
+c6_DAG <- c6_markers$Gene
+c7_DAG <- c7_markers$Gene
+c8_DAG <- c8_markers$Gene
+
+DAG_obj <- list(c0_DAG, c1_DAG, c2_DAG, c3_DAG, c4_DAG, c5_DAG, c6_DAG, c7_DAG, c8_DAG)#create a list object of the DAG vectors
+ATAC_fibros <- c('0 RF', '1 PF', '2 Div Fibro', '3 PF', '4 RF', '5 DP', 
+                         '6 PF', '7 Fascia RF', '8 Adipo RF')#cluster names from the fibroblast subset scATAC
+DAG_names <- paste(ATAC_fibros, "DAG")
+```
+
+# Get expression scores for the DAGs by scRNA cluster
+```{r fig.height=42, fig.width=6, message=FALSE, warning=FALSE}
+#we need to define the cluster IDs in scRNA so we can iterate through them properly to look at expression of DAGs
+COI <- c('0 Crabp1 PF', '1 RF', '2 PF', '3 DP', '4 Dkk2 PF', '5 Div Fibro', 
+                         '6 Adipo RF', '7 Fascia RF', '8 Div Fibro', '9 APM')#define the cluster IDs from scRNA-seq
+path_out <- 'W:/Driskell Lab/Thompson et al. 2021/Data/P0 WT/RNA/Fibroblasts/DAG_Exp/'#path to export folder
+
+
+tic('Start DotPlot of all DAG sets by Cluster')
+
+n_dot <- 1
+while(n_dot < length(DAG_names) + 1) {
+  DAGs <- DAG_obj[[n_dot]]
+  d1 <- DotPlot(object = scRNA_WT_fibro2, features = DAGs, 
+                cluster.idents = FALSE) + 
+    scale_colour_gradientn(colours = divergentcolors_RYB(22)) +
+    ggtitle(DAG_names[n_dot]) + 
+    coord_flip() + 
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))#color cells w/ custom color scheme, add title for DAG set, use ggplot to flip x/y axes, rotate x axis labels
+  print(d1)
+  
+  #extract the datavalues of the DotPlot, since it is a ggplot object
+  raw_dotplot <- ggplot_build(d1)
+  raw_dotplot <- as.data.frame(raw_dotplot[["plot"]][["data"]])#need to make rownames unique!!!
+  
+  n_coi <- 1#initialize counter for which cluster's data you are extracting
+  while (n_coi < length(COI) + 1) {
+    coi_id <- raw_dotplot$id
+    row_matches <- grep(COI[n_coi], coi_id)#get index positions of rows for the first atac cluster ID
+    raw_dotplot_temp <- raw_dotplot[row_matches, ]#subset for the set of data corresponding to first rna cluster
+    
+    #bug fixing for cases where one element in a column has an NA -- returns NA from mean()
+    raw_dotplot_temp$avg.exp[which(is.na(raw_dotplot_temp$avg.exp))] <- 0#replace the positions in avg.exp that have NA with 0
+    raw_dotplot_temp$pct.exp[which(is.na(raw_dotplot_temp$pct.exp))] <- 0#replace the positions in the pct.exp that has NA with 0
+    raw_dotplot_temp$avg.exp.scaled[which(is.na(raw_dotplot_temp$avg.exp.scaled))] <- 0#replace the items in the pct.exp that has NA with 0
+  
+    if (n_coi == 1) {
+      raw_dotplot_summary_master <- data.frame("avg.exp" = mean(raw_dotplot_temp$avg.exp), 
+                                           "avg.pct" = mean(raw_dotplot_temp$pct.exp),
+                                           "avg.exp.scaled" = mean(raw_dotplot_temp$avg.exp.scaled))
+      raw_dotplot_summary_master$'corr.score' = raw_dotplot_summary_master$avg.exp * raw_dotplot_summary_master$avg.pct
+      raw_dotplot_summary_master$'corr.score.scaled' = raw_dotplot_summary_master$avg.exp.scaled * raw_dotplot_summary_master$avg.pct
+      rownames(raw_dotplot_summary_master) <- paste("cluster", COI[n_coi])
+    }
+    if (n_coi > 1) {
+      raw_dotplot_summary_temp <- data.frame("avg.exp" = mean(raw_dotplot_temp$avg.exp), 
+                                           "avg.pct" = mean(raw_dotplot_temp$pct.exp),
+                                           "avg.exp.scaled" = mean(raw_dotplot_temp$avg.exp.scaled))
+      raw_dotplot_summary_temp$'corr.score' = raw_dotplot_summary_temp$avg.exp * raw_dotplot_summary_temp$avg.pct
+      raw_dotplot_summary_temp$'corr.score.scaled' = raw_dotplot_summary_temp$avg.exp.scaled * raw_dotplot_summary_temp$avg.pct
+      rownames(raw_dotplot_summary_temp) <- paste("cluster", COI[n_coi])
+      
+      #merge dataframes of metrics from individual rna clusters to see the overall relationship of rna cluster to the DAGs
+      raw_dotplot_summary_master <- rbind(raw_dotplot_summary_master, raw_dotplot_summary_temp)
+      
+      write.csv(raw_dotplot_summary_master, file = paste(path_out, DAG_names[n_dot], "_DotPlot_corr_rna.csv", sep = ''))
+    }
+    
+    n_coi <- n_coi + 1
+  }
+
+  
+  #ggsave()
+  n_dot <- n_dot + 1
+}
+toc()
+```
+
+## View correlation of all RNA clusters to all scATAC DAGs using a heatmap (combines the above section into one)
+```{r message=FALSE, warning=FALSE}
+path_in <- 'W:/Driskell Lab/Thompson et al. 2021/Data/P0 WT/RNA/Fibroblasts/DAG_Exp/'#path to import folder
+ATAC_fibros <- c('0 RF', '1 PF', '2 Div Fibro', '3 PF', '4 RF', '5 DP', 
+                         '6 PF', '7 Fascia RF', '8 Adipo RF')#cluster names from the fibroblast subset scATAC
+DAG_names <- paste(ATAC_fibros, "DAG")
+rna_cluster <- c('0 Crabp1 PF', '1 RF', '2 PF', '3 DP', '4 Dkk2 PF', '5 Div Fibro', 
+                         '6 Adipo RF', '7 Fascia RF', '8 Div Fibro', '9 APM')
+
+file_names <- paste(path_in, DAG_names, "_DotPlot_corr_rna.csv", sep = '')
+
+DAG_DotPlot_corr0 <- as.data.frame(read.csv(file = file_names[1]))
+DAG_DotPlot_corr1 <- as.data.frame(read.csv(file = file_names[2]))
+DAG_DotPlot_corr2 <- as.data.frame(read.csv(file = file_names[3]))
+DAG_DotPlot_corr3 <- as.data.frame(read.csv(file = file_names[4]))
+DAG_DotPlot_corr4 <- as.data.frame(read.csv(file = file_names[5]))
+DAG_DotPlot_corr5 <- as.data.frame(read.csv(file = file_names[6]))
+DAG_DotPlot_corr6 <- as.data.frame(read.csv(file = file_names[7]))
+DAG_DotPlot_corr7 <- as.data.frame(read.csv(file = file_names[8]))
+DAG_DotPlot_corr8 <- as.data.frame(read.csv(file = file_names[9]))
+
+#we need to extract the columns of correlation score values to form vector lists that will be rows, columns, and values (X, Y, Z) for heatmap. Need to duplicate the names of each row for each column for a total number of rows of # rna clusters x # atac DAGs
+DAG_v <- c(DAG_DotPlot_corr0$corr.score.scaled, DAG_DotPlot_corr1$corr.score.scaled,
+           DAG_DotPlot_corr2$corr.score.scaled, DAG_DotPlot_corr3$corr.score.scaled,
+           DAG_DotPlot_corr4$corr.score.scaled, DAG_DotPlot_corr5$corr.score.scaled,
+           DAG_DotPlot_corr6$corr.score.scaled, DAG_DotPlot_corr7$corr.score.scaled,
+           DAG_DotPlot_corr8$corr.score.scaled)#v for vector of DAG correlation values
+
+DAG_names <- c(rep(ATAC_fibros[1], length(rna_cluster)), rep(ATAC_fibros[2], length(rna_cluster)),
+               rep(ATAC_fibros[3], length(rna_cluster)), rep(ATAC_fibros[4], length(rna_cluster)),
+               rep(ATAC_fibros[5], length(rna_cluster)), rep(ATAC_fibros[6], length(rna_cluster)),
+               rep(ATAC_fibros[7], length(rna_cluster)), rep(ATAC_fibros[8], length(rna_cluster)),
+               rep(ATAC_fibros[9], length(rna_cluster)))#want to repeat the DAG name = #rows in each dataframe (= # scRNA clusters), sequentially
+
+RNA_names <- c(rep(rna_cluster, length(ATAC_fibros)))#names of the rows, repeat equal to the total number of DAGs each set of scRNA clusters is compared to
+
+heat_DotPlot_corr_gg <- data.frame("RNA_Cluster" = RNA_names, "scATAC_DAG" = DAG_names, "corr.score.scaled" = DAG_v)#define x, y, z
+
+hmap <- ggplot(data = heat_DotPlot_corr_gg,
+               aes(y = factor(scATAC_DAG, 
+                              levels = c("5 DP", "3 PF", "1 PF", "6 PF", "2 Div Fibro", "0 RF", "4 RF", "8 Adipo RF", "7 Fascia RF")), 
+                   x = factor(RNA_Cluster, 
+                              levels = c('3 DP', '4 Dkk2 PF', '0 Crabp1 PF', '2 PF', '8 Div Fibro', 
+                                         '5 Div Fibro', '1 RF', '6 Adipo RF', '7 Fascia RF', '9 APM')),
+                   fill = corr.score.scaled)) +
+  geom_tile() +
+  scale_fill_gradient2(low = "#313695", mid = "#f7f7f7", high = "#a50026") + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+          panel.background = element_rect(fill = NA),
+          plot.background = element_rect(fill = NA),
+          panel.grid.major.y = element_line(colour = NA),
+          panel.grid.major.x = element_line(colour = NA),
+          panel.grid.minor.y = element_line(colour = NA)) +
+  ggtitle("scATAC Cluster DAG Correlation to scRNA Cluster Expression") +
+  ylab(label = "scATAC DAG") + xlab(label = "scRNA Cluster")
+
+print(hmap)
+
+## Now look at just the scaled expression score of the RNA slot (isolate expression from pct.exp)
+DAG_v <- c(DAG_DotPlot_corr0$avg.exp.scaled, DAG_DotPlot_corr1$avg.exp.scaled,
+           DAG_DotPlot_corr2$avg.exp.scaled, DAG_DotPlot_corr3$avg.exp.scaled,
+           DAG_DotPlot_corr4$avg.exp.scaled, DAG_DotPlot_corr5$avg.exp.scaled,
+           DAG_DotPlot_corr6$avg.exp.scaled, DAG_DotPlot_corr7$avg.exp.scaled,
+           DAG_DotPlot_corr8$avg.exp.scaled)#vector of DAG correlation values
+
+DAG_names <- c(rep(ATAC_fibros[1], length(rna_cluster)), rep(ATAC_fibros[2], length(rna_cluster)),
+               rep(ATAC_fibros[3], length(rna_cluster)), rep(ATAC_fibros[4], length(rna_cluster)),
+               rep(ATAC_fibros[5], length(rna_cluster)), rep(ATAC_fibros[6], length(rna_cluster)),
+               rep(ATAC_fibros[7], length(rna_cluster)), rep(ATAC_fibros[8], length(rna_cluster)),
+               rep(ATAC_fibros[9], length(rna_cluster)))#want to repeat the DAG name = #rows in each dataframe (= # scRNA clusters)
+
+RNA_names <- c(rep(rna_cluster, length(ATAC_fibros)))#names of the rows, repeat equal to the total number of DAGs each set of RNA clusters is compared to
+
+heat_DotPlot_corr_gg2 <- data.frame("RNA_Cluster" = RNA_names, "scATAC_DAG" = DAG_names, "avg.exp.scaled" = DAG_v)
+
+hmap2 <- ggplot(data = heat_DotPlot_corr_gg2,
+               aes(y = factor(scATAC_DAG, 
+                              levels = c("5 DP", "3 PF", "1 PF", "6 PF", "2 Div Fibro", "0 RF", "4 RF", "8 Adipo RF", "7 Fascia RF")), 
+                   x = factor(RNA_Cluster, 
+                              levels = c('3 DP', '4 Dkk2 PF', '0 Crabp1 PF', '2 PF', '8 Div Fibro', 
+                                         '5 Div Fibro', '1 RF', '6 Adipo RF', '7 Fascia RF', '9 APM')),
+                   fill = avg.exp.scaled)) +
+  geom_tile() +
+  scale_fill_gradient2(low = "#313695", mid = "#f7f7f7", high = "#a50026") + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+          panel.background = element_rect(fill = NA),
+          plot.background = element_rect(fill = NA),
+          panel.grid.major.y = element_line(colour = NA),
+          panel.grid.major.x = element_line(colour = NA),
+          panel.grid.minor.y = element_line(colour = NA)) +
+  ggtitle("scATAC Cluster DAG Correlation to scRNA Cluster Expression") +
+  ylab(label = "scATAC DAG") + xlab(label = "scRNA Cluster")
+
+print(hmap2)
+```
+
+

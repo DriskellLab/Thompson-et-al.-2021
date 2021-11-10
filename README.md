@@ -3,6 +3,8 @@ P0 scATAC-seq and scRNA-seq paper
 
 Packages & Package Versions:
 <need_to_do>
+### Loading data from processed files ###
+To create the fragments file object, the fragments.tsv.gz and fragments.tsv.tbi files must be in the same directory!
 
 
 ### Possible bug with loading EnsDb.Mmusculus.v79 & a fix ###

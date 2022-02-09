@@ -1,7 +1,7 @@
 # Thompson-et-al.-2021
 P0 scATAC-seq and scRNA-seq paper, open access in the Journal of Investigative Dermatology via: https://doi.org/10.1016/j.jid.2021.11.032
 
-##Packages & Package Versions##
+## Packages & Package Versions ##
  [1] tidyr_1.1.3                        patchwork_1.1.1                   
  [3] tictoc_1.0.1                       future_1.21.0                     
  [5] stringr_1.4.0                      metap_1.4                         
